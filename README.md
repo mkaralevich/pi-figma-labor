@@ -1,6 +1,8 @@
 # figma-pi
 
-Lets the [pi coding agent](https://github.com/badlogic/pi) read and modify Figma designs directly via the Plugin API.
+Lets the [pi coding agent](https://github.com/badlogic/pi-mono) read and modify Figma designs directly via the Plugin API.
+
+> See also [figma-pi-mcp](https://github.com/mkaralevich/figma-pi-mcp) — bridges the Figma desktop app's local MCP server into pi for design inspection and code generation.
 
 ## Architecture
 
