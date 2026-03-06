@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Inter", -apple-system, sans-serif;
+      font-size: 11px;
+      background: var(--figma-color-bg, #fff);
+      color: var(--figma-color-text, #000);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Status bar ── */
+    #status-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--figma-color-border, #e5e5e5);
+      flex-shrink: 0;
+    }
+
+    #status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #999;
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+    #status-dot.connected    { background: #1bc47d; }
+    #status-dot.disconnected { background: #f24e1e; }
+    #status-dot.connecting   { background: #f7a100; }
+
+    #status-text {
+      flex: 1;
+      color: var(--figma-color-text-secondary, #666);
+    }
+
+    #reconnect-btn {
+      font-size: 10px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      border: 1px solid var(--figma-color-border, #ccc);
+      background: transparent;
+      cursor: pointer;
+      color: var(--figma-color-text, #000);
+      display: none;
+    }
+    #reconnect-btn:hover { background: var(--figma-color-bg-hover, #f5f5f5); }
+
+    /* ── Log ── */
+    #log-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 12px;
+      flex-shrink: 0;
+      border-bottom: 1px solid var(--figma-color-border, #e5e5e5);
+    }
+    #log-header span { color: var(--figma-color-text-secondary, #666); }
+    #clear-btn {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--figma-color-border, #ccc);
+      background: transparent;
+      cursor: pointer;
+      color: var(--figma-color-text-secondary, #666);
+    }
+    #clear-btn:hover { background: var(--figma-color-bg-hover, #f5f5f5); }
+
+    #log {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 0;
+    }
+
+    .log-entry {
+      display: grid;
+      grid-template-columns: 52px 1fr;
+      gap: 4px;
+      padding: 4px 12px;
+      line-height: 1.4;
+      border-bottom: 1px solid var(--figma-color-border, #f0f0f0);
+    }
+    .log-entry:last-child { border-bottom: none; }
+
+    .log-time {
+      color: var(--figma-color-text-tertiary, #999);
+      font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
+    }
+
+    .log-cmd  { color: var(--figma-color-text, #000); font-weight: 500; }
+    .log-ok   { color: #1bc47d; }
+    .log-err  { color: #f24e1e; }
+    .log-info { color: var(--figma-color-text-secondary, #666); }
+
+    .log-detail {
+      grid-column: 2;
+      color: var(--figma-color-text-secondary, #666);
+      word-break: break-all;
+      font-size: 10px;
+      margin-top: 1px;
+    }
+
+    #empty {
+      padding: 24px 12px;
+      text-align: center;
+      color: var(--figma-color-text-tertiary, #999);
+    }
+  </style>
+</head>
+<body>
+
+  <div id="status-bar">
+    <div id="status-dot" class="connecting"></div>
+    <span id="status-text">Connecting...</span>
+    <button id="reconnect-btn" onclick="if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null;} connect()">Reconnect</button>
+  </div>
+
+  <div id="log-header">
+    <span>Command log</span>
+    <button id="clear-btn" onclick="clearLog()">Clear</button>
+  </div>
+
+  <div id="log">
+    <div id="empty">No commands yet</div>
+  </div>
+
+<script>
+  const BRIDGE_URL = "ws://localhost:3846";
+  const MAX_LOG = 50;
+  const RECONNECT_DELAY = 3000;
+  const PING_INTERVAL = 10000;
+
+  let ws = null;
+  let logEntries = [];
+  let reconnectTimer = null;
+  let pingTimer = null;
+  let intentionalClose = false;
+
+  // ── Status ────────────────────────────────────────────────────────────────
+
+  function setStatus(state, text) {
+    document.getElementById("status-dot").className = state;
+    document.getElementById("status-text").textContent = text;
+    document.getElementById("reconnect-btn").style.display =
+      state === "disconnected" ? "block" : "none";
+  }
+
+  // ── Log ───────────────────────────────────────────────────────────────────
+
+  function addLog(type, command, detail) {
+    const now = new Date();
+    const time = now.toLocaleTimeString("en", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    logEntries.unshift({ type, command, detail, time });
+    if (logEntries.length > MAX_LOG) logEntries.pop();
+    renderLog();
+  }
+
+  function renderLog() {
+    const el = document.getElementById("log");
+    if (logEntries.length === 0) {
+      el.innerHTML = '<div id="empty">No commands yet</div>';
+      return;
+    }
+    el.innerHTML = logEntries.map(e => `
+      <div class="log-entry">
+        <span class="log-time">${e.time}</span>
+        <span class="log-${e.type}">${e.command}</span>
+        ${e.detail ? `<span class="log-detail">${e.detail}</span>` : ""}
+      </div>
+    `).join("");
+  }
+
+  function clearLog() {
+    logEntries = [];
+    renderLog();
+  }
+
+  // ── WebSocket ─────────────────────────────────────────────────────────────
+
+  function scheduleReconnect() {
+    if (reconnectTimer) return; // already scheduled
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connect();
+    }, RECONNECT_DELAY);
+  }
+
+  function connect() {
+    // Don't connect if already open or connecting
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+
+    intentionalClose = false;
+    setStatus("connecting", "Connecting to bridge...");
+    ws = new WebSocket(BRIDGE_URL);
+
+    ws.onopen = () => {
+      setStatus("connected", "Bridge connected");
+      addLog("info", "connected", null);
+      // Keep connection alive with periodic pings
+      if (pingTimer) clearInterval(pingTimer);
+      pingTimer = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "ping" }));
+        }
+      }, PING_INTERVAL);
+    };
+
+    ws.onclose = (event) => {
+      ws = null;
+      if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+      if (intentionalClose) return;
+      // Code 1000 = normal closure (bridge replaced us with a newer connection)
+      // Still reconnect — bridge may have restarted
+      setStatus("disconnected", "Bridge disconnected");
+      addLog("err", "disconnected", `code ${event.code}`);
+      scheduleReconnect();
+    };
+
+    ws.onerror = () => {
+      // onclose will fire after this
+    };
+
+    ws.onmessage = (event) => {
+      let msg;
+      try { msg = JSON.parse(event.data); } catch { return; }
+      addLog("cmd", msg.command, JSON.stringify(msg.params || {}).slice(0, 80));
+      parent.postMessage({ pluginMessage: msg }, "*");
+    };
+  }
+
+  // ── Main thread responses ─────────────────────────────────────────────────
+
+  window.onmessage = (event) => {
+    const msg = event.data.pluginMessage;
+    if (!msg || !msg.id) return;
+
+    if (msg.error) {
+      addLog("err", `error (${msg.id.slice(0, 6)})`, msg.error);
+    } else {
+      addLog("ok", `done (${msg.id.slice(0, 6)})`, null);
+    }
+
+    // Send result back to bridge
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(msg));
+    }
+  };
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+
+  connect();
+</script>
+</body>
+</html>
