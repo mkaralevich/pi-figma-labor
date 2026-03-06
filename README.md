@@ -62,6 +62,7 @@ Bridge server source (Node.js HTTP + WebSocket). Only needed if you want to modi
 | `figma_move_node`           | Move a node to a different parent                              |
 | `figma_select_node`         | Select a node and zoom to it                                   |
 | `figma_detach_instance`     | Detach a component instance into a plain frame                 |
+| `figma_run_script`          | Run arbitrary JavaScript in the Figma plugin context           |
 | `figma_undo`                | Undo the last operation                                        |
 
 ## Rebuilding the bridge
