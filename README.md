@@ -1,71 +1,68 @@
-# figma-pi
+# figma-pi-labor
 
-Lets the [pi coding agent](https://github.com/badlogic/pi-mono) read and modify Figma designs directly via the Plugin API.
+Connects [pi-coding-agent](https://github.com/badlogic/pi-mono) to Figma.
 
-> See also [figma-pi-mcp](https://github.com/mkaralevich/figma-pi-mcp) — bridges the Figma desktop app's local MCP server into pi for design inspection and code generation.
+- Uses WS connection via local bridge that comes with pi extension
+- Uses [Figma plugin API](https://developers.figma.com/docs/plugins/api/api-reference/), so you can do everything it allows
 
-## Architecture
+## Instructions
+
+- Place `figma-labor` extension in your `/extensions` folder
+- Spin up bridge via `/figma-labor-start` command
+- Footer shows `figma-pi ○` when bridge is running
+- In Figma, open [Pi Labor plugin](https://www.figma.com/community/plugin/1611556075783258900/figma-pi) to start connection
+- Footer shows `figma-pi ✓` when the plugin is connected
+- Ask your pi to do things
+
+Use `figma-labor-stop` if you want to close connection.
+
+For MCP tools (like `take_screenshot`), install [figma-mcp](https://github.com/mkaralevich/figma-pi-mcp) extension.
+
+## How it works
 
 ```
-pi extension → bridge server (HTTP) → WebSocket → Figma plugin → Plugin API → Figma canvas
+↓ pi extension
+↓ bridge server (HTTP)
+↓ WebSocket
+↓ Figma plugin
+↓ Plugin API
+. Figma canvas
 ```
 
-- **`pi-extension/`** — pi extension. Registers Figma tools the LLM can call. Manages bridge lifecycle. Includes pre-built `bridge.js` — no separate install needed.
-- **`figma-plugin/`** — Figma desktop plugin. Connects to the bridge via WebSocket, executes Plugin API commands, returns results.
-- **`figma-bridge/`** — Bridge server source (Node.js HTTP + WebSocket, port 3846). Only needed if you want to modify and rebuild the bridge.
+## Development
 
-## Setup
-
-### 1. Install the Figma plugin
-
-In Figma desktop, install the **figma-pi** plugin from the Figma Community.
-
-### 2. Wire up the pi extension
-
-Copy the `pi-extension/` folder into your pi extensions folder:
-
-```bash
-cp -r pi-extension ~/.pi/agent/extensions/figma-pi
 ```
+**`pi-extension/`**
+Registers most used Figma tools the LLM can call, includes pre-built `bridge.js`
 
-### 3. Use
+**`figma-plugin/`**
+Figma desktop plugin. Connects to the bridge via WebSocket, executes Plugin API commands, returns results.
 
-1. Open Figma desktop and open a file
-2. Run the plugin: **Menu → Plugins → Development → figma-pi**
-3. Start pi — run `/figma-pi-start` to launch the bridge
-4. Footer shows `figma-pi ✓` when the plugin is connected
-
-The bridge keeps running across prompts. Use `/figma-pi stop` to shut it down, or it stops automatically when pi exits.
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `/figma-pi-start` | Start the bridge server |
-| `/figma-pi-end` | Stop the bridge server |
-| `/figma-pi` | Show connection status |
+**`figma-bridge/`**
+Bridge server source (Node.js HTTP + WebSocket). Only needed if you want to modify and rebuild the bridge.
+```
 
 ## Tools
 
-| Tool | Description |
-|------|-------------|
-| `figma_get_selection` | Get currently selected nodes |
-| `figma_get_node` | Get a node by ID |
-| `figma_get_node_full` | Get a node with all layout and constraint properties |
-| `figma_get_children` | List children of a node |
-| `figma_get_component_props` | Get component variant definitions |
-| `figma_update_properties` | Change name, position, size, opacity, visibility, rotation |
-| `figma_resize_node` | Resize a node |
-| `figma_update_fills` | Change fill colors (r/g/b/a, 0–1 range) |
-| `figma_update_text` | Change text content and font size |
-| `figma_set_layout` | Set auto-layout direction, alignment, sizing, padding, spacing |
-| `figma_create_node` | Create RECTANGLE, ELLIPSE, FRAME, or TEXT |
-| `figma_create_instance` | Create an instance of a component |
-| `figma_delete_node` | Delete a node |
-| `figma_move_node` | Move a node to a different parent |
-| `figma_select_node` | Select a node and zoom to it |
-| `figma_detach_instance` | Detach a component instance into a plain frame |
-| `figma_undo` | Undo the last operation |
+| Tool                        | Description                                                    |
+| --------------------------- | -------------------------------------------------------------- |
+| `figma_get_selection`       | Get currently selected nodes                                   |
+| `figma_get_node`            | Get a node by ID                                               |
+| `figma_get_node_full`       | Get a node with all layout and constraint properties           |
+| `figma_get_children`        | List children of a node                                        |
+| `figma_get_component_props` | Get component variant definitions                              |
+| `figma_update_properties`   | Change name, position, size, opacity, visibility, rotation     |
+| `figma_resize_node`         | Resize a node                                                  |
+| `figma_update_fills`        | Change fill colors (r/g/b/a, 0–1 range)                        |
+| `figma_update_text`         | Change text content and font size                              |
+| `figma_set_layout`          | Set auto-layout direction, alignment, sizing, padding, spacing |
+| `figma_create_node`         | Create RECTANGLE, ELLIPSE, FRAME, or TEXT                      |
+| `figma_create_instance`     | Create an instance of a component                              |
+| `figma_delete_node`         | Delete a node                                                  |
+| `figma_move_node`           | Move a node to a different parent                              |
+| `figma_select_node`         | Select a node and zoom to it                                   |
+| `figma_detach_instance`     | Detach a component instance into a plain frame                 |
+| `figma_undo`                | Undo the last operation                                        |
 
 ## Rebuilding the bridge
 

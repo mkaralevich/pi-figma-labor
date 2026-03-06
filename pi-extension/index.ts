@@ -125,7 +125,7 @@ function stopBridge() {
 // ## Footer status helper
 
 function footerLabel(plugin: string): string {
-  return plugin === "connected" ? "figma-pi ✓" : "figma-pi ○";
+  return plugin === "connected" ? "figma-labor ✓" : "figma-labor ○";
 }
 
 // ## Tool wrapper
@@ -174,7 +174,7 @@ export default function (pi: ExtensionAPI) {
     pollTimer = setInterval(async () => {
       const s = await bridgeStatus();
       cachedStatus = s;
-      ctx.ui.setStatus("figma-pi", s ? footerLabel(s.plugin) : "figma-pi ✗");
+      ctx.ui.setStatus("figma-labor", s ? footerLabel(s.plugin) : "figma-labor ✗");
     }, 3000);
   }
 
@@ -187,7 +187,7 @@ export default function (pi: ExtensionAPI) {
     (async () => {
       const s = await bridgeStatus();
       cachedStatus = s;
-      ctx.ui.setStatus("figma-pi", s ? footerLabel(s.plugin) : "figma-pi ✗");
+      ctx.ui.setStatus("figma-labor", s ? footerLabel(s.plugin) : "figma-labor ✗");
       if (s) startPolling(ctx);
     })();
   });
@@ -208,7 +208,7 @@ export default function (pi: ExtensionAPI) {
     };
   });
 
-  pi.registerCommand("figma-pi-start", {
+  pi.registerCommand("figma-labor-start", {
     description: "Start the figma-pi bridge server",
     handler: async (_args, ctx) => {
       const already = await bridgeStatus();
@@ -220,31 +220,31 @@ export default function (pi: ExtensionAPI) {
       ctx.ui.notify("Starting figma-pi bridge...", "info");
       const ok = await startBridge();
       if (!ok) {
-        ctx.ui.setStatus("figma-pi", "figma-pi ✗");
+        ctx.ui.setStatus("figma-labor", "figma-labor ✗");
         ctx.ui.notify("Failed to start figma-pi bridge.\n\nMake sure bridge.js exists at:\n" + BRIDGE_BIN, "error");
         return;
       }
       const status = await bridgeStatus();
       cachedStatus = status;
-      ctx.ui.setStatus("figma-pi", footerLabel(status?.plugin ?? "disconnected"));
+      ctx.ui.setStatus("figma-labor", footerLabel(status?.plugin ?? "disconnected"));
       ctx.ui.notify(`figma-pi bridge started.\nPlugin: ${status?.plugin ?? "disconnected"}`, "success");
       startPolling(ctx);
     },
   });
 
-  pi.registerCommand("figma-pi-end", {
+  pi.registerCommand("figma-labor-end", {
     description: "Stop the figma-pi bridge server",
     handler: async (_args, ctx) => {
       stopPolling();
       stopBridge();
       cachedStatus = null;
-      ctx.ui.setStatus("figma-pi", "figma-pi ✗");
+      ctx.ui.setStatus("figma-labor", "figma-labor ✗");
       ctx.ui.notify("figma-pi bridge stopped.", "info");
     },
   });
 
   pi.registerCommand("figma-pi", {
-    description: "Show figma-pi bridge status",
+    description: "Show Figma bridge server connection status",
     handler: async (_args, ctx) => {
       const status = await bridgeStatus();
       if (!status) {
