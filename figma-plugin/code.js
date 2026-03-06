@@ -4,12 +4,17 @@
 
 figma.showUI(__html__, {
   width: 280,
-  height: 360,
+  height: 120,
   title: "Figma Labor",
   themeColors: true,
 });
 
 figma.ui.onmessage = async (msg) => {
+  if (msg.type === "resize") {
+    figma.ui.resize(280, msg.height);
+    return;
+  }
+
   const { id, command, params } = msg;
   try {
     const result = await executeCommand(command, params);
