@@ -38,11 +38,11 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { StringEnum } from "@mariozechner/pi-ai";
 import { spawn, type ChildProcess } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const __dirname = realpathSync(dirname(fileURLToPath(import.meta.url)));
 const PROMPT_TEMPLATE = readFileSync(join(__dirname, "prompt.md"), "utf8");
 
 const BRIDGE_URL = "http://127.0.0.1:3846";
@@ -208,47 +208,47 @@ export default function (pi: ExtensionAPI) {
     };
   });
 
-  // /figma-pi command — start | stop | (status)
-
-  pi.registerCommand("figma-pi", {
-    description: "Manage the figma-pi bridge: start, stop, or show status",
-    handler: async (args, ctx) => {
-      const sub = args?.trim();
-
-      if (sub === "start") {
-        const already = await bridgeStatus();
-        if (already) {
-          ctx.ui.notify(`figma-pi bridge is already running.\nPlugin: ${already.plugin}`, "info");
-          startPolling(ctx);
-          return;
-        }
-        ctx.ui.notify("Starting figma-pi bridge...", "info");
-        const ok = await startBridge();
-        if (!ok) {
-          ctx.ui.setStatus("figma-pi", "figma-pi ✗");
-          ctx.ui.notify("Failed to start figma-pi bridge.\n\nMake sure the bridge directory exists:\n" + BRIDGE_DIR, "error");
-          return;
-        }
-        const status = await bridgeStatus();
-        cachedStatus = status;
-        ctx.ui.setStatus("figma-pi", footerLabel(status?.plugin ?? "disconnected"));
-        ctx.ui.notify(`figma-pi bridge started.\nPlugin: ${status?.plugin ?? "disconnected"}`, "success");
+  pi.registerCommand("figma-pi-start", {
+    description: "Start the figma-pi bridge server",
+    handler: async (_args, ctx) => {
+      const already = await bridgeStatus();
+      if (already) {
+        ctx.ui.notify(`figma-pi bridge is already running.\nPlugin: ${already.plugin}`, "info");
         startPolling(ctx);
         return;
       }
-
-      if (sub === "stop") {
-        stopPolling();
-        stopBridge();
+      ctx.ui.notify("Starting figma-pi bridge...", "info");
+      const ok = await startBridge();
+      if (!ok) {
         ctx.ui.setStatus("figma-pi", "figma-pi ✗");
-        ctx.ui.notify("figma-pi bridge stopped.", "info");
+        ctx.ui.notify("Failed to start figma-pi bridge.\n\nMake sure bridge.js exists at:\n" + BRIDGE_BIN, "error");
         return;
       }
+      const status = await bridgeStatus();
+      cachedStatus = status;
+      ctx.ui.setStatus("figma-pi", footerLabel(status?.plugin ?? "disconnected"));
+      ctx.ui.notify(`figma-pi bridge started.\nPlugin: ${status?.plugin ?? "disconnected"}`, "success");
+      startPolling(ctx);
+    },
+  });
 
-      // No args — show status
+  pi.registerCommand("figma-pi-end", {
+    description: "Stop the figma-pi bridge server",
+    handler: async (_args, ctx) => {
+      stopPolling();
+      stopBridge();
+      cachedStatus = null;
+      ctx.ui.setStatus("figma-pi", "figma-pi ✗");
+      ctx.ui.notify("figma-pi bridge stopped.", "info");
+    },
+  });
+
+  pi.registerCommand("figma-pi", {
+    description: "Show figma-pi bridge status",
+    handler: async (_args, ctx) => {
       const status = await bridgeStatus();
       if (!status) {
-        ctx.ui.notify("figma-pi bridge is not running.\n\nRun /figma-pi start to launch it.", "error");
+        ctx.ui.notify("figma-pi bridge is not running.\n\nRun /figma-pi-start to launch it.", "error");
         return;
       }
       ctx.ui.notify(

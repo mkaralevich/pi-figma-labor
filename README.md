@@ -30,7 +30,7 @@ cp -r pi-extension ~/.pi/agent/extensions/figma-pi
 
 1. Open Figma desktop and open a file
 2. Run the plugin: **Menu → Plugins → Development → figma-pi**
-3. Start pi — run `/figma-pi start` to launch the bridge
+3. Start pi — run `/figma-pi-start` to launch the bridge
 4. Footer shows `figma-pi ✓` when the plugin is connected
 
 The bridge keeps running across prompts. Use `/figma-pi stop` to shut it down, or it stops automatically when pi exits.
@@ -39,8 +39,8 @@ The bridge keeps running across prompts. Use `/figma-pi stop` to shut it down, o
 
 | Command | Description |
 |---------|-------------|
-| `/figma-pi start` | Start the bridge server |
-| `/figma-pi stop` | Stop the bridge server |
+| `/figma-pi-start` | Start the bridge server |
+| `/figma-pi-end` | Stop the bridge server |
 | `/figma-pi` | Show connection status |
 
 ## Tools
