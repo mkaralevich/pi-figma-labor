@@ -2,10 +2,9 @@
 
 Live connection to Figma via the figma-labor bridge (Plugin API). Plugin: {{plugin_status}}
 
-Use these tools to **read and manipulate the canvas** — creating, updating, and deleting nodes. For design inspection or code generation from a design, prefer the `get_design_context` / `get_screenshot` tools (figma-mcp) instead.
+Use these tools to **manipulate the canvas**. For design inspection or code generation use `get_design_context` / `get_screenshot` (figma-mcp).
 
-**Node IDs:** strings like `"123:456"` · paste a Figma URL and the ID is extracted automatically.
-**Colors:** r/g/b/a in 0–1 (e.g. Shopify green = {r:0, g:0.502, b:0.376}).
+**Workflow:** read selection → propose → apply → undo if wrong → verify.
 
 **Non-obvious API behaviors:**
 - Children are back-to-front: index 0 = bottommost layer, last = topmost
@@ -19,8 +18,11 @@ Use these tools to **read and manipulate the canvas** — creating, updating, an
 **`figma_run_script` — key rules:**
 - Both `figma.getNodeById(id)` and `figma.getNodeByIdAsync(id)` are patched to handle compound instance IDs (containing `;`) safely — they fall back to `findOne` when needed
 - Never access `node.mainComponent` (sync) — always use `await node.getMainComponentAsync()`
+- `node.findAll()` on INSTANCE nodes crashes the proxy — use `figma.currentPage.findAll(n => n.id.startsWith("I<instanceId>;"))` instead
+- Set `layoutSizingHorizontal` / `layoutSizingVertical` only **after** appending the node to an auto-layout frame, not before
 - `combineAsVariants()` may throw "proxy: inconsistent get" — clone an existing COMPONENT_SET instead
-- **Performance on large pages:** scope `findAll` to a section/frame, not the entire page. Use `sec.findAll(pred)` instead of `figma.currentPage.findAll(pred)` when possible
+- Reordering children requires `insertChild(i, node)` — setting `.x`/`.y` is silently ignored
+- **Performance on large pages:** scope `findAll` to a section/frame, not the entire page
 - **Batching:** pre-compute fill/paint objects once and reuse in loops — don't call `solidPaint()` or `setBoundVariableForPaint()` per node
 
 **Variable-bound fills — correct pattern:**
@@ -34,5 +36,3 @@ node.fills = [bound];
 
 // ❌ Wrong — solidPaint('#FF0000') sets red base, variable won't display
 ```
-
-**Workflow:** read selection → propose change → apply → undo immediately if wrong → verify.
