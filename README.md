@@ -7,6 +7,14 @@ Connects [pi-coding-agent](https://github.com/badlogic/pi-mono) to Figma.
 
 ## Instructions
 
+Message `pi`:
+
+```
+Install this pi-extension https://github.com/mkaralevich/figma-pi-labor"
+```
+
+OR
+
 - Place extension in your `/extensions` folder
 - Spin up bridge via `/figma-labor-start` command
 - Footer shows `figma-labor ○` when bridge is running
