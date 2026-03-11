@@ -95,7 +95,14 @@ async function executeCommand(command, params) {
     case "update_text": {
       const node = await requireNode(params.nodeId);
       if (node.type !== "TEXT") throw new Error(`Node ${params.nodeId} is not a text node`);
-      await figma.loadFontAsync(node.fontName);
+      // Load all fonts in the node (fontName may be figma.mixed for mixed-font nodes)
+      const segments = node.getStyledTextSegments(["fontName"]);
+      const fontSet = new Map();
+      for (const seg of segments) {
+        const f = seg.fontName;
+        if (f && f.family) fontSet.set(f.family + "::" + f.style, f);
+      }
+      for (const f of fontSet.values()) await figma.loadFontAsync(f);
       if (params.text !== undefined) node.characters = params.text;
       if (params.fontSize !== undefined) node.fontSize = params.fontSize;
       return serializeNode(node);
@@ -279,15 +286,20 @@ async function executeCommand(command, params) {
     case "run_script": {
       // params.code: string — JS to run in the plugin context
       // The script has access to `figma` and must return a value (or a Promise).
-      // Patch getNodeById → getNodeByIdAsync so LLM-generated code doesn't need
-      // to remember the async variant when using dynamic-page documentAccess.
+      //
+      // Proxy notes:
+      // - figma is itself an internal Proxy in the Figma sandbox.
+      // - Wrapping it in another Proxy and returning val.bind(target) for functions
+      //   violates the JS Proxy invariant for non-configurable properties, throwing
+      //   "proxy: inconsistent get". We use Reflect.get as a pass-through instead,
+      //   which returns the exact same value the target has — satisfying the invariant.
+      // - Only getNodeById is remapped to getNodeByIdAsync (dynamic-page requirement).
       const proxy = new Proxy(figma, {
-        get(target, prop) {
+        get(target, prop, receiver) {
           if (prop === "getNodeById") {
             return (id) => target.getNodeByIdAsync(id);
           }
-          const val = target[prop];
-          return typeof val === "function" ? val.bind(target) : val;
+          return Reflect.get(target, prop, receiver);
         },
       });
       const fn = new Function("figma", `"use strict"; return (async () => { ${params.code} })()`);
