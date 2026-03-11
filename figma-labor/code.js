@@ -277,20 +277,17 @@ async function executeCommand(command, params) {
     // ── Run script ─────────────────────────────────────────────────────────
 
     case "run_script": {
-      const proxy = new Proxy(figma, {
-        get(target, prop) {
-          if (prop === "getNodeById") {
-            return (id) => safeGetNodeById(id);
-          }
-          if (prop === "getNodeByIdAsync") {
-            return (id) => safeGetNodeById(id);
-          }
-          const val = target[prop];
-          return typeof val === "function" ? val.bind(target) : val;
-        },
-      });
-      const fn = new Function("figma", `"use strict"; return (async () => { ${params.code} })()`);
-      return await fn(proxy);
+      // Pass the real figma object — wrapping it in a JS Proxy conflicts with
+      // Figma's internal proxy mechanism and causes "proxy: inconsistent get"
+      // on ANY async API call (getNodeByIdAsync, setCurrentPageAsync, etc.).
+      //
+      // safeGetNodeById is available as a helper for compound instance IDs
+      // (those containing ';') which getNodeByIdAsync can't resolve reliably.
+      const fn = new Function(
+        "figma", "safeGetNodeById",
+        `"use strict"; return (async () => { ${params.code} })()`
+      );
+      return await fn(figma, safeGetNodeById);
     }
 
     default:
