@@ -1,3 +1,5 @@
+> Made in Shopify
+
 # pi-figma-labor
 
 Connects [pi-coding-agent](https://github.com/badlogic/pi-mono) to Figma.
