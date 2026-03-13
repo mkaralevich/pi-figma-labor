@@ -1,4 +1,4 @@
-# figma-pi-labor
+# pi-figma-labor
 
 Connects [pi-coding-agent](https://github.com/badlogic/pi-mono) to Figma.
 
@@ -10,7 +10,7 @@ Connects [pi-coding-agent](https://github.com/badlogic/pi-mono) to Figma.
 Message `pi`:
 
 ```
-Install this pi-extension https://github.com/mkaralevich/figma-pi-labor"
+Install this pi-extension https://github.com/mkaralevich/pi-figma-labor"
 ```
 
 OR
