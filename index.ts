@@ -5,14 +5,8 @@
  * which relays commands to the Figma plugin via WebSocket → Plugin API.
  *
  * Requires:
- *   1. Bridge server running at http://127.0.0.1:3846  (start with /figma-labor start)
+ *   1. Bridge server running at http://127.0.0.1:3846  (start with /figma-labor-start)
  *   2. figma-labor plugin open inside Figma desktop app
- *
- * Usage notes:
- *   @see ~/.pi/agent-shopify/notes/figma-node-traversal.md
- *   — Efficient patterns for traversing repeated component instances.
- *     Key rule: drill ONE instance to learn the suffix ID pattern, then
- *     extrapolate across all siblings without further get_children calls.
  *
  * Tools registered:
  *   figma_get_selection       Get currently selected nodes
@@ -31,6 +25,7 @@
  *   figma_move_node           Move a node to a different parent
  *   figma_select_node         Select a node and zoom to it
  *   figma_detach_instance     Detach an instance, converting it to a plain frame
+ *   figma_run_script          Run arbitrary JS in the Figma plugin context
  *   figma_undo                Undo the last operation
  */
 
@@ -65,13 +60,17 @@ async function bridgeStatus(timeout = 2000): Promise<{ bridge: string; plugin: s
   }
 }
 
-async function bridgeCommand(command: string, params: Record<string, unknown>, opts?: { timeout?: number }): Promise<unknown> {
+async function bridgeCommand(command: string, params: Record<string, unknown>, opts?: { timeout?: number; signal?: AbortSignal }): Promise<unknown> {
   const timeoutMs = opts?.timeout ?? 35_000;
+  const httpTimeoutSignal = AbortSignal.timeout(timeoutMs + 5_000); // HTTP timeout > bridge timeout
+  const signal = opts?.signal
+    ? AbortSignal.any([opts.signal, httpTimeoutSignal])
+    : httpTimeoutSignal;
   const res = await fetch(`${BRIDGE_URL}/command`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ command, params, timeout: opts?.timeout }),
-    signal: AbortSignal.timeout(timeoutMs + 5_000), // HTTP timeout > bridge timeout
+    signal,
   });
   const json = await res.json() as { result?: unknown; error?: string };
   if (json.error) throw new Error(json.error);
@@ -131,7 +130,7 @@ function footerLabel(plugin: string): string {
 
 // ## Tool wrapper
 
-async function runTool(command: string, params: Record<string, unknown>, opts?: { timeout?: number }) {
+async function runTool(command: string, params: Record<string, unknown>, opts?: { timeout?: number; signal?: AbortSignal }) {
   const status = await bridgeStatus();
 
   if (!status) {
@@ -193,7 +192,7 @@ export default function (pi: ExtensionAPI) {
     })();
   });
 
-  pi.on("session_shutdown", async () => {
+  pi.on("session_shutdown", async (_event) => {
     stopPolling();
     stopBridge();
   });
@@ -266,8 +265,8 @@ export default function (pi: ExtensionAPI) {
     label: "Figma Get Selection",
     description: "Get the currently selected nodes in Figma. Always call this first to understand what the user has selected.",
     parameters: Type.Object({}),
-    async execute(_id, _params) {
-      return runTool("get_selection", {});
+    async execute(_id, _params, signal) {
+      return runTool("get_selection", {}, { signal });
     },
   });
 
@@ -278,8 +277,8 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({
       nodeId: Type.String({ description: "Node ID, e.g. '123:456'" }),
     }),
-    async execute(_id, params) {
-      return runTool("get_node", { nodeId: params.nodeId });
+    async execute(_id, params, signal) {
+      return runTool("get_node", { nodeId: params.nodeId }, { signal });
     },
   });
 
@@ -290,8 +289,8 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({
       nodeId: Type.Optional(Type.String({ description: "Parent node ID. Omit for current page." })),
     }),
-    async execute(_id, params) {
-      return runTool("get_children", { nodeId: params.nodeId });
+    async execute(_id, params, signal) {
+      return runTool("get_children", { nodeId: params.nodeId }, { signal });
     },
   });
 
@@ -302,8 +301,8 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({
       nodeId: Type.String({ description: "COMPONENT_SET node ID" }),
     }),
-    async execute(_id, params) {
-      return runTool("get_component_properties", { nodeId: params.nodeId });
+    async execute(_id, params, signal) {
+      return runTool("get_component_properties", { nodeId: params.nodeId }, { signal });
     },
   });
 
@@ -322,9 +321,9 @@ export default function (pi: ExtensionAPI) {
       visible: Type.Optional(Type.Boolean({ description: "Visibility" })),
       rotation: Type.Optional(Type.Number({ description: "Rotation in degrees" })),
     }),
-    async execute(_id, params) {
+    async execute(_id, params, signal) {
       const { nodeId, ...properties } = params;
-      return runTool("update_properties", { nodeId, properties });
+      return runTool("update_properties", { nodeId, properties }, { signal });
     },
   });
 
@@ -337,8 +336,8 @@ export default function (pi: ExtensionAPI) {
       width: Type.Number({ description: "New width in px" }),
       height: Type.Number({ description: "New height in px" }),
     }),
-    async execute(_id, params) {
-      return runTool("resize_node", params);
+    async execute(_id, params, signal) {
+      return runTool("resize_node", params, { signal });
     },
   });
 
@@ -358,8 +357,8 @@ export default function (pi: ExtensionAPI) {
         { description: "Array of solid fills" }
       ),
     }),
-    async execute(_id, params) {
-      return runTool("update_fills", params);
+    async execute(_id, params, signal) {
+      return runTool("update_fills", params, { signal });
     },
   });
 
@@ -372,8 +371,8 @@ export default function (pi: ExtensionAPI) {
       text: Type.Optional(Type.String({ description: "New text content" })),
       fontSize: Type.Optional(Type.Number({ description: "Font size in px" })),
     }),
-    async execute(_id, params) {
-      return runTool("update_text", params);
+    async execute(_id, params, signal) {
+      return runTool("update_text", params, { signal });
     },
   });
 
@@ -391,8 +390,8 @@ export default function (pi: ExtensionAPI) {
       height: Type.Optional(Type.Number()),
       text: Type.Optional(Type.String({ description: "Initial text (TEXT nodes only)" })),
     }),
-    async execute(_id, params) {
-      return runTool("create_node", params);
+    async execute(_id, params, signal) {
+      return runTool("create_node", params, { signal });
     },
   });
 
@@ -408,8 +407,8 @@ export default function (pi: ExtensionAPI) {
       name: Type.Optional(Type.String({ description: "Override the instance name" })),
       properties: Type.Optional(Type.Record(Type.String(), Type.Unknown(), { description: "Component property overrides, e.g. { 'size': 'medium', 'label': 'Click me' }" })),
     }),
-    async execute(_id, params) {
-      return runTool("create_instance", params as Record<string, unknown>);
+    async execute(_id, params, signal) {
+      return runTool("create_instance", params as Record<string, unknown>, { signal });
     },
   });
 
@@ -420,8 +419,8 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({
       nodeId: Type.String({ description: "Node ID to delete" }),
     }),
-    async execute(_id, params) {
-      return runTool("delete_node", params);
+    async execute(_id, params, signal) {
+      return runTool("delete_node", params, { signal });
     },
   });
 
@@ -434,8 +433,8 @@ export default function (pi: ExtensionAPI) {
       parentId: Type.String({ description: "Target parent node ID" }),
       index: Type.Optional(Type.Number({ description: "Insert at this child index (0 = first)" })),
     }),
-    async execute(_id, params) {
-      return runTool("move_node", params);
+    async execute(_id, params, signal) {
+      return runTool("move_node", params, { signal });
     },
   });
 
@@ -446,8 +445,8 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({
       nodeId: Type.String({ description: "Node ID to select" }),
     }),
-    async execute(_id, params) {
-      return runTool("select_node", params);
+    async execute(_id, params, signal) {
+      return runTool("select_node", params, { signal });
     },
   });
 
@@ -458,8 +457,8 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({
       nodeId: Type.String({ description: "Node ID, e.g. '123:456'" }),
     }),
-    async execute(_id, params) {
-      return runTool("get_node_full", { nodeId: params.nodeId });
+    async execute(_id, params, signal) {
+      return runTool("get_node_full", { nodeId: params.nodeId }, { signal });
     },
   });
 
@@ -480,9 +479,9 @@ export default function (pi: ExtensionAPI) {
       paddingLeft: Type.Optional(Type.Number({ description: "Left padding in px" })),
       itemSpacing: Type.Optional(Type.Number({ description: "Gap between children in px" })),
     }),
-    async execute(_id, params) {
+    async execute(_id, params, signal) {
       const { nodeId, ...layoutProps } = params;
-      return runTool("set_layout", { nodeId, ...layoutProps });
+      return runTool("set_layout", { nodeId, ...layoutProps }, { signal });
     },
   });
 
@@ -493,8 +492,8 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({
       nodeId: Type.String({ description: "INSTANCE node ID to detach" }),
     }),
-    async execute(_id, params) {
-      return runTool("detach_instance", params);
+    async execute(_id, params, signal) {
+      return runTool("detach_instance", params, { signal });
     },
   });
 
@@ -505,8 +504,8 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({
       code: Type.String({ description: "JS code to execute. Has access to `figma`. Use return to return a value." }),
     }),
-    async execute(_id, params) {
-      return runTool("run_script", { code: params.code }, { timeout: 60_000 });
+    async execute(_id, params, signal) {
+      return runTool("run_script", { code: params.code }, { timeout: 60_000, signal });
     },
   });
 
@@ -515,7 +514,7 @@ export default function (pi: ExtensionAPI) {
     label: "Figma Undo",
     description: "Undo the last Figma operation. Call this immediately if a change was wrong.",
     parameters: Type.Object({}),
-    async execute() {
+    async execute(_id, _params, signal) {
       const status = await bridgeStatus();
       if (!status || status.plugin !== "connected") {
         return {
