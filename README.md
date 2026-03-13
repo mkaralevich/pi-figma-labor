@@ -27,7 +27,7 @@ Use `figma-labor-stop` if you want to close connection.
 
 ## Figma MCP
 
-Figma MCP is optional but can improve quality with tools like `take_screenshot`. Install [figma-mcp](https://github.com/mkaralevich/pi-figma-mcp) extension.
+Figma MCP is optional but can improve quality with tools like `take_screenshot`. Install [pi-figma-mcp](https://github.com/mkaralevich/pi-figma-mcp) extension.
 
 ## How it works
 
