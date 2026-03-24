@@ -18,6 +18,8 @@ frame.itemSpacing = 8;
 frame.counterAxisSpacing = 8;
 ```
 
+**Note:** If the Figma MCP remote server is connected (`use_figma` tool available), prefer it over the bridge tools for canvas writes. `use_figma` executes Plugin API JS server-side — same capability as `figma_run_script` but without needing the local bridge/plugin. The bridge tools remain as a fallback.
+
 **Non-obvious API behaviors:**
 
 | Behavior | Description | Workaround |
