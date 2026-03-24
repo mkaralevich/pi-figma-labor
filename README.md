@@ -21,7 +21,8 @@ Or place extension in your `/extensions` folder
 
 - Spin up bridge via `/figma-labor-start` command
 - Footer shows `figma-labor ○` when bridge is running
-- In Figma, open Pi Labor plugin ([Shopify](https://www.figma.com/community/plugin/1611556075783258900/figma-labor)) | (Public TBD) to start connection
+- In Figma, switch to **Design Mode** (not Dev Mode — plugins are read-only there)
+- Open Pi Labor plugin ([Shopify](https://www.figma.com/community/plugin/1611556075783258900/figma-labor)) | (Public TBD) to start connection
 - Footer shows `figma-labor ✓` when the plugin is connected
 - Ask your `pi` to do things
 

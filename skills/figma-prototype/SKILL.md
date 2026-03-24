@@ -1,5 +1,5 @@
 ---
-name: figma-prototyping
+name: figma-prototype
 description: Use when the user wants to create, edit, inspect, or debug Figma prototyping interactions — flows, connections, triggers, actions, transitions, overlays, scroll behaviors, smart animate, navigation between frames, and prototype starting points.
 ---
 

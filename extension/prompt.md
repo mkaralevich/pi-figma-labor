@@ -18,7 +18,14 @@ frame.itemSpacing = 8;
 frame.counterAxisSpacing = 8;
 ```
 
-**Note:** If the Figma MCP remote server is connected (`use_figma` tool available), prefer it over the bridge tools for canvas writes. `use_figma` executes Plugin API JS server-side — same capability as `figma_run_script` but without needing the local bridge/plugin. The bridge tools remain as a fallback.
+**Always use `figma_run_script` for canvas reads and writes.** Do NOT use `use_figma` —
+it runs the same Plugin API server-side but with hard limitations that cause silent
+failures: no `set_currentPage`, timeouts on large operations, no cross-page access.
+The bridge (`figma_run_script`) has none of these restrictions.
+
+**Dev Mode:** reads work (`figma_run_script` for inspection, `findAll`, node properties),
+writes don't (all setter methods are blocked). If writes fail silently, ask the user
+to switch to Design Mode.
 
 **Non-obvious API behaviors:**
 
@@ -31,6 +38,18 @@ frame.counterAxisSpacing = 8;
 | More nodes detached than expected | `figma_detach_instance` detaches all ancestor instances, not just the target | Expect ancestors to become plain frames too |
 | Alignment/sizing ignored after `figma_set_layout` | `layoutMode` must be HORIZONTAL or VERTICAL before alignment or sizing modes apply | Always include `layoutMode` in the same call |
 | Slow reads after writes | Alternating writes to a ComponentNode and reads from its InstanceNode stalls the plugin | Batch all reads first, then all writes |
+
+**Error recovery:** on `figma_run_script` error, **STOP — do not immediately retry.**
+Failed scripts are atomic: if a script errors, no changes are made to the file. Read
+the error message, understand what went wrong, fix the script, then retry. Common
+errors: wrong node ID (null reference), color 0-255 instead of 0-1, font not loaded,
+sizing set before appendChild.
+
+**`figma_run_script` — script size limit:**
+Long creation scripts (>40 lines of `createFrame`/`createText` calls) silently fail —
+they return no output and create no nodes, with no error. Break large creation tasks
+into multiple scripts: one for the container, one per section. Each script must return
+a value; if it returns nothing, it failed.
 
 **`figma_run_script` — key rules:**
 
