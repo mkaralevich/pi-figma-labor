@@ -4,7 +4,19 @@ Live connection to Figma via the figma-labor bridge (Plugin API). Plugin: {{plug
 
 Use these tools to **manipulate the canvas**. For design inspection or code generation use `get_design_context` / `get_screenshot` (figma-mcp).
 
-**Workflow:** read selection → propose → apply → undo if wrong → verify.
+**Workflow:** read selection → propose → apply → **verify with `get_screenshot`** → undo if wrong.
+
+**Before starting any Figma task, check if a `figma-*` skill matches and read it first.** Skills contain optimized patterns that prevent wasted tool calls.
+
+**Verification:** after any canvas mutation (create, move, update, delete), call `get_screenshot` on the affected node to visually confirm the result. Do not report success without verifying. Common issues that only screenshots catch: overlapping nodes, wrong positioning, clipped content, invisible fills.
+
+**Layout rule:** when placing multiple nodes into a frame, always use auto-layout (`layoutMode`, `layoutWrap`, `itemSpacing`) instead of manual x/y positioning. Auto-layout prevents overlaps and adapts to varying node sizes. Set it via `figma_run_script`:
+```js
+frame.layoutMode = "HORIZONTAL";
+frame.layoutWrap = "WRAP";
+frame.itemSpacing = 8;
+frame.counterAxisSpacing = 8;
+```
 
 **Non-obvious API behaviors:**
 
