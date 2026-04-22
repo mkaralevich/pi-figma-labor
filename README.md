@@ -74,4 +74,4 @@ If you modify `bridge-src/src/server.ts`:
 cd bridge-src && npm install && npm run build
 ```
 
-This rebundles `bridge.js` into the `extension/` directory.
+This rebundles `bridge.js` into the `extensions/` directory.
