@@ -36,6 +36,11 @@ Build new elements and compose them into existing layouts with labor tools.
 - Always inspect before creating
 - Keep discovery small
 - Match local naming, variables, component patterns, spacing, and styling
+- Reuse before creating:
+  1. connected library assets already enabled in the file
+  2. existing local assets in the file
+  3. new local assets only if reuse is not possible
+- If the user asks to use a design library, connected tokens, or existing styles, do not create new local tokens or styles until connected and local reuse paths have both been checked
 - For most tasks, read only:
   - target node or parent
   - one nearby reference sibling

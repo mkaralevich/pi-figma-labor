@@ -27,6 +27,17 @@ Work with variables, tokens, components, variants, and styles using labor tools.
   - one nearby good reference
   - then apply the same pattern
 
+## Reuse priority
+
+- Follow this order strictly:
+  1. connected library assets already enabled in the file
+  2. existing local assets in the file
+  3. new local assets you create
+- This applies to variables, styles, components, and variants
+- Do not create new local tokens or styles until steps 1 and 2 have both been checked
+- If remote discovery is limited by permissions or API access, inspect existing instances, `boundVariables`, style IDs, and remote main components before creating anything new
+- If the user asks to use a design library, connected tokens, or existing styles, creating new local DS assets is a last resort
+
 ## Variables and tokens
 
 ### Discover local collections
@@ -60,9 +71,15 @@ return filtered.map((variable) => ({
 ### Remote and library variables
 
 - `getLocalVariablesAsync()` only shows variables defined in the current file
+- Check remote and connected library variables before local variables when the task mentions a library, tokens, styles, or an existing design system
 - For library variables:
   - `mcp: search_design_system`
   - `labor: labor_run_script` to inspect existing bound variables in the file
+- If direct library enumeration is unavailable, do not assume the library is absent
+  - inspect existing instances that use remote components
+  - inspect `boundVariables` on fills, strokes, text, effects, and layout props
+  - inspect remote main components and their children for variable bindings
+  - only fall back to local variables after these checks
 
 ### Team library variables
 
@@ -584,6 +601,9 @@ return "paint style applied";
 
 ## Effect styles
 
+- Current figma-labor validator may reject `effects[].blendMode`
+- Workaround: omit `blendMode` from effect objects even if official Figma docs show it
+
 ### Create an effect style
 
 ```js
@@ -596,7 +616,6 @@ style.effects = [{
 	color: { r: 0, g: 0, b: 0, a: 0.1 },
 	offset: { x: 0, y: 4 },
 	spread: 0,
-	blendMode: "NORMAL",
 	showShadowBehindNode: false,
 }];
 return { styleId: style.id };
