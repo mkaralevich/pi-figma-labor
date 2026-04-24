@@ -5,63 +5,95 @@ description: Use when the user wants to create, edit, or inspect design system e
 
 # Figma Design System
 
-Instructions for working with variables, tokens, components, variants, and styles
-via `figma_run_script`.
+Work with variables, tokens, components, variants, and styles using labor tools.
 
-**This is never a one-shot task.** Building design system elements requires multiple
-`figma_run_script` calls with validation between them. Break every operation to the
-smallest useful unit.
+## Core workflow
 
----
+- Do not treat DS work as a one-shot task
+- Break work into the smallest useful validated step
+- Read first, then create or update
+- Verify the first correct pattern before batching
+- Use this verification pattern:
+  - `mcp: get_screenshot`
+  - `labor: labor_zoom_to_node` + manual inspect
 
-## Variables & tokens
+## Discovery first
 
-### Discover before creating
+- Always check what already exists before creating anything
+- Keep reads tight
+- Prefer local inspection over broad scans
+- For most DS tasks, inspect only:
+  - target collection, component, or style
+  - one nearby good reference
+  - then apply the same pattern
 
-**Always check what exists before creating variables.** Run a read-only script first:
+## Variables and tokens
+
+### Discover local collections
+
+- Read collections before creating new ones
 
 ```js
 const collections = await figma.variables.getLocalVariableCollectionsAsync();
-return collections.map(c => ({
-  name: c.name, id: c.id,
-  varCount: c.variableIds.length,
-  modes: c.modes.map(m => m.name)
+return collections.map((collection) => ({
+	name: collection.name,
+	id: collection.id,
+	varCount: collection.variableIds.length,
+	modes: collection.modes.map((mode) => mode.name),
 }));
 ```
 
-To list variables in a collection:
+### Discover local variables in one collection
 
 ```js
 const vars = await figma.variables.getLocalVariablesAsync();
-const filtered = vars.filter(v => v.variableCollectionId === "COLLECTION_ID");
-return filtered.map(v => ({
-  name: v.name, id: v.id,
-  resolvedType: v.resolvedType,
-  scopes: v.scopes,
-  valuesByMode: v.valuesByMode,
+const filtered = vars.filter((variable) => variable.variableCollectionId === "COLLECTION_ID");
+return filtered.map((variable) => ({
+	name: variable.name,
+	id: variable.id,
+	resolvedType: variable.resolvedType,
+	scopes: variable.scopes,
+	valuesByMode: variable.valuesByMode,
 }));
 ```
 
-**Important:** `getLocalVariablesAsync()` only returns variables defined in the
-current file. Library/remote variables are invisible to this API. To find those,
-use `search_design_system` with `includeVariables: true`, or inspect bound variables
-on existing nodes (see figma-select skill).
+### Remote and library variables
 
-### Create a variable collection
+- `getLocalVariablesAsync()` only shows variables defined in the current file
+- For library variables:
+  - `mcp: search_design_system`
+  - `labor: labor_run_script` to inspect existing bound variables in the file
+
+### Team library variables
+
+- Native plugin API path for enabled libraries:
+  - `figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync()`
+  - `figma.teamLibrary.getVariablesInLibraryCollectionAsync(collectionKey)`
+- Libraries must already be enabled in the file UI
+- This is the native alternative to `mcp: search_design_system` for variable discovery
+
+```js
+const collections = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
+return collections.map((collection) => ({
+	name: collection.name,
+	key: collection.key,
+	libraryName: collection.libraryName,
+}));
+```
+
+### Create a collection
 
 ```js
 const collection = figma.variables.createVariableCollection("Primitives");
-// Rename the default mode
 collection.renameMode(collection.modes[0].modeId, "Value");
 return { collectionId: collection.id, modeId: collection.modes[0].modeId };
 ```
 
-To add modes (e.g. Light/Dark):
+### Add modes
 
 ```js
 const collection = await figma.variables.getVariableCollectionByIdAsync("COLLECTION_ID");
 const darkModeId = collection.addMode("Dark");
-// First mode is Light by default
 collection.renameMode(collection.modes[0].modeId, "Light");
 return { lightModeId: collection.modes[0].modeId, darkModeId };
 ```
@@ -72,55 +104,55 @@ return { lightModeId: collection.modes[0].modeId, darkModeId };
 const collection = await figma.variables.getVariableCollectionByIdAsync("COLLECTION_ID");
 const modeId = collection.modes[0].modeId;
 
-// Color variable
 const bgPrimary = figma.variables.createVariable("color/bg/primary", collection, "COLOR");
 bgPrimary.setValueForMode(modeId, { r: 1, g: 1, b: 1, a: 1 });
 
-// Float variable (spacing, radius)
 const spacingSm = figma.variables.createVariable("spacing/sm", collection, "FLOAT");
 spacingSm.setValueForMode(modeId, 8);
 
 return { bgPrimaryId: bgPrimary.id, spacingSmId: spacingSm.id };
 ```
 
-### Set scopes on every variable
+### Set scopes
 
-**Never leave scopes as `ALL_SCOPES`.** It pollutes every property picker.
+- Do not leave variables on `ALL_SCOPES`
+- Use the narrowest practical scope
 
 | Token type | Scopes |
 |---|---|
-| Background colors | `["FRAME_FILL", "SHAPE_FILL"]` |
-| Text colors | `["TEXT_FILL"]` |
-| Border colors | `["STROKE_COLOR"]` |
-| Spacing (padding, gap) | `["GAP"]` |
-| Corner radius | `["CORNER_RADIUS"]` |
-| Width/height | `["WIDTH_HEIGHT"]` |
-| Opacity | `["OPACITY"]` |
-| Font size/weight | `["FONT_SIZE", "FONT_WEIGHT"]` |
-| Primitives (raw values) | `[]` (hidden from pickers) |
+| Background colors | `FRAME_FILL`, `SHAPE_FILL` |
+| Text colors | `TEXT_FILL` |
+| Border colors | `STROKE_COLOR` |
+| Spacing | `GAP` |
+| Corner radius | `CORNER_RADIUS` |
+| Width or height | `WIDTH_HEIGHT` |
+| Opacity | `OPACITY` |
+| Font size or weight | `FONT_SIZE`, `FONT_WEIGHT` |
+| Raw primitives | `[]` |
 
 ```js
-const v = await figma.variables.getVariableByIdAsync("VAR_ID");
-v.scopes = ["FRAME_FILL", "SHAPE_FILL"];
+const variable = await figma.variables.getVariableByIdAsync("VAR_ID");
+variable.scopes = ["FRAME_FILL", "SHAPE_FILL"];
 return "scopes set";
 ```
 
 ### Set code syntax
 
-Code syntax enables Dev Mode round-tripping. Web syntax **must** use the `var()` wrapper:
+- Web syntax should use `var(...)`
+- Android and iOS usually use raw token references
 
 ```js
-const v = await figma.variables.getVariableByIdAsync("VAR_ID");
-v.setVariableCodeSyntax("WEB", "var(--color-bg-primary)");
-// Android/iOS don't use wrappers
-v.setVariableCodeSyntax("ANDROID", "colorBgPrimary");
-v.setVariableCodeSyntax("iOS", "Color.bgPrimary");
+const variable = await figma.variables.getVariableByIdAsync("VAR_ID");
+variable.setVariableCodeSyntax("WEB", "var(--color-bg-primary)");
+variable.setVariableCodeSyntax("ANDROID", "colorBgPrimary");
+variable.setVariableCodeSyntax("iOS", "Color.bgPrimary");
 return "code syntax set";
 ```
 
-### Alias semantic to primitive variables
+### Alias semantic tokens to primitives
 
-Never duplicate raw values in the semantic layer. Use aliases:
+- Do not duplicate raw values in semantic tokens
+- Alias semantics to primitives
 
 ```js
 const semanticCollection = await figma.variables.getVariableCollectionByIdAsync("SEMANTIC_COLLECTION_ID");
@@ -139,17 +171,17 @@ return { id: bgPrimary.id };
 
 ### Bind variables to nodes
 
+- Spacing, radius, and dimensions use direct binding
+- Paints require `setBoundVariableForPaint()` and reassignment
+
 ```js
 const node = await figma.getNodeByIdAsync("NODE_ID");
 const spacingVar = await figma.variables.getVariableByIdAsync("SPACING_VAR_ID");
-
-// Spacing, radius, dimensions — direct binding
 node.setBoundVariable("paddingLeft", spacingVar);
 node.setBoundVariable("paddingRight", spacingVar);
 node.setBoundVariable("itemSpacing", spacingVar);
 node.setBoundVariable("topLeftRadius", spacingVar);
 
-// Colors — requires setBoundVariableForPaint (returns NEW paint, must reassign)
 const colorVar = await figma.variables.getVariableByIdAsync("COLOR_VAR_ID");
 const basePaint = { type: "SOLID", color: { r: 0, g: 0, b: 0 } };
 const boundPaint = figma.variables.setBoundVariableForPaint(basePaint, "color", colorVar);
@@ -158,46 +190,137 @@ node.fills = [boundPaint];
 return "bindings set";
 ```
 
-**Critical:** `setBoundVariableForPaint` returns a **new** paint object. You must
-capture it and reassign to `node.fills`. The base paint RGB should match the
-variable's resolved value.
+### Inspect bound variables
 
-### Token architecture patterns
+- Audit existing DS files through `boundVariables`
+- Useful reads:
+  - `node.boundVariables`
+  - `style.boundVariables`
+  - `variable.resolveForConsumer(node)`
 
-| Token count | Pattern |
-|---|---|
-| < 50 | Single collection, 2 modes (Light/Dark) |
-| 50-200 | Primitives (1 mode) + Color semantic (Light/Dark) + Spacing (1 mode) |
-| 200+ | Multiple semantic collections, 4-8 modes (Light/Dark x Contrast x Brand) |
+```js
+const node = await figma.getNodeByIdAsync("NODE_ID");
+return {
+	boundVariables: node.boundVariables,
+	fills: node.fills,
+	strokes: node.strokes,
+};
+```
+
+### Typography variables
+
+- Typography tokens can bind to:
+  - `fontFamily`
+  - `fontStyle`
+  - `fontWeight`
+  - `lineHeight`
+  - `letterSpacing`
+  - `paragraphSpacing`
+  - `paragraphIndent`
+- For partial text ranges, use `setRangeBoundVariable()`
+- For audits, use `getRangeBoundVariable()` or `getStyledTextSegments(['boundVariables'])`
+- Text styles can also bind typography variables with `TextStyle.setBoundVariable()`
+
+```js
+const collection = figma.variables.createVariableCollection("type");
+const modeId = collection.modes[0].modeId;
+const fontFamilyVar = figma.variables.createVariable("font/family/base", collection, "STRING");
+fontFamilyVar.setValueForMode(modeId, "Roboto");
+
+await figma.loadFontAsync({ family: "Inter", style: "Regular" });
+await figma.loadFontAsync({ family: "Roboto", style: "Regular" });
+
+const text = figma.createText();
+text.characters = "Hello world";
+text.setBoundVariable("fontFamily", fontFamilyVar);
+
+return { textId: text.id, boundVariables: text.boundVariables };
+```
+
+### Variable-bound effects and layout grids
+
+- Effects and layout grids use helper functions plus immutable reassignment
+- Useful for shadow, blur, and grid token systems
+
+```js
+const node = await figma.getNodeByIdAsync("NODE_ID");
+const radiusVar = await figma.variables.getVariableByIdAsync("RADIUS_VAR_ID");
+const countVar = await figma.variables.getVariableByIdAsync("COUNT_VAR_ID");
+
+const effects = JSON.parse(JSON.stringify(node.effects));
+effects[0] = figma.variables.setBoundVariableForEffect(effects[0], "radius", radiusVar);
+node.effects = effects;
+
+const grids = JSON.parse(JSON.stringify(node.layoutGrids));
+grids[0] = figma.variables.setBoundVariableForLayoutGrid(grids[0], "count", countVar);
+node.layoutGrids = grids;
+
+return "effect and grid bindings set";
+```
 
 ### Import library variables
 
-For variables from published libraries:
-
 ```js
-// Import by key (from search_design_system results)
 const imported = await figma.variables.importVariableByKeyAsync("VARIABLE_KEY");
-// Now bind it to a node
 node.setBoundVariable("itemSpacing", imported);
 return { id: imported.id, name: imported.name };
 ```
 
----
+## Token architecture
 
-## Components & variants
+- Small system:
+  - one collection
+  - two modes: light and dark
+- Medium system:
+  - primitives
+  - semantic color
+  - spacing
+- Large system:
+  - multiple semantic collections
+  - multiple modes by theme, contrast, or brand
 
-### Discover existing components
+## Extended collections
 
-Before creating, check what exists:
+- Enterprise-only feature
+- Use extended collections for theming on top of a parent collection
+- Key APIs:
+  - `collection.extend(name)`
+  - `figma.variables.extendLibraryCollectionByKeyAsync(key, name)`
+  - `variable.valuesByModeForCollectionAsync(extendedCollection)`
+  - `extendedCollection.variableOverrides`
+- Use overrides instead of duplicating the parent collection
+
+```js
+const base = figma.variables.createVariableCollection("semantic");
+const extended = base.extend("semantic/dark");
+const modeId = extended.modes[0].modeId;
+const variable = figma.variables.createVariable("color/text/primary", base, "COLOR");
+variable.setValueForMode(base.modes[0].modeId, { r: 0, g: 0, b: 0, a: 1 });
+variable.setValueForMode(modeId, { r: 1, g: 1, b: 1, a: 1 });
+return { baseId: base.id, extendedId: extended.id };
+```
+
+## Components and variants
+
+### Discovery
+
+- Prefer dedicated labor tools when they fit
+  - `labor_get_component_set_summary`
+  - `labor_create_component_set`
+- Good sequence:
+  - inspect the target component
+  - inspect one nearby reference set
+  - create one working variant set
+  - verify it
+  - reuse the same recipe
 
 ```js
 const results = [];
-const page = figma.currentPage;
-page.findAll(n => {
-  if (n.type === "COMPONENT" || n.type === "COMPONENT_SET") {
-    results.push({ name: n.name, type: n.type, id: n.id });
-  }
-  return false;
+figma.currentPage.findAll((node) => {
+	if (node.type === "COMPONENT" || node.type === "COMPONENT_SET") {
+		results.push({ name: node.name, type: node.type, id: node.id });
+	}
+	return false;
 });
 return results;
 ```
@@ -213,8 +336,10 @@ comp.layoutMode = "HORIZONTAL";
 comp.primaryAxisSizingMode = "AUTO";
 comp.counterAxisSizingMode = "AUTO";
 comp.counterAxisAlignItems = "CENTER";
-comp.paddingTop = 10; comp.paddingBottom = 10;
-comp.paddingLeft = 16; comp.paddingRight = 16;
+comp.paddingTop = 10;
+comp.paddingBottom = 10;
+comp.paddingLeft = 16;
+comp.paddingRight = 16;
 comp.cornerRadius = 8;
 comp.fills = [{ type: "SOLID", color: { r: 0.24, g: 0.36, b: 0.96 } }];
 
@@ -228,134 +353,174 @@ comp.appendChild(label);
 return { componentId: comp.id };
 ```
 
-### Create variants with combineAsVariants
+### Create variants
 
-Create individual COMPONENT nodes first, then combine:
+- Create separate `COMPONENT` nodes first
+- Then combine them into a set
+- If only combining is missing, prefer `labor_create_component_set`
 
 ```js
 await figma.loadFontAsync({ family: "Inter Variable", style: "Medium" });
 
 const variants = [];
 const configs = [
-  { variant: "Primary", fill: { r: 0.24, g: 0.36, b: 0.96 }, textFill: { r: 1, g: 1, b: 1 } },
-  { variant: "Secondary", fill: { r: 0.95, g: 0.95, b: 0.97 }, textFill: { r: 0, g: 0, b: 0 } },
+	{ variant: "Primary", fill: { r: 0.24, g: 0.36, b: 0.96 }, textFill: { r: 1, g: 1, b: 1 } },
+	{ variant: "Secondary", fill: { r: 0.95, g: 0.95, b: 0.97 }, textFill: { r: 0, g: 0, b: 0 } },
 ];
 
 for (const cfg of configs) {
-  const comp = figma.createComponent();
-  comp.name = `Variant=${cfg.variant}`;
-  comp.layoutMode = "HORIZONTAL";
-  comp.primaryAxisSizingMode = "AUTO";
-  comp.counterAxisSizingMode = "AUTO";
-  comp.counterAxisAlignItems = "CENTER";
-  comp.paddingTop = 10; comp.paddingBottom = 10;
-  comp.paddingLeft = 16; comp.paddingRight = 16;
-  comp.cornerRadius = 8;
-  comp.fills = [{ type: "SOLID", color: cfg.fill }];
+	const comp = figma.createComponent();
+	comp.name = `Variant=${cfg.variant}`;
+	comp.layoutMode = "HORIZONTAL";
+	comp.primaryAxisSizingMode = "AUTO";
+	comp.counterAxisSizingMode = "AUTO";
+	comp.counterAxisAlignItems = "CENTER";
+	comp.paddingTop = 10;
+	comp.paddingBottom = 10;
+	comp.paddingLeft = 16;
+	comp.paddingRight = 16;
+	comp.cornerRadius = 8;
+	comp.fills = [{ type: "SOLID", color: cfg.fill }];
 
-  const label = figma.createText();
-  label.fontName = { family: "Inter Variable", style: "Medium" };
-  label.characters = "Button";
-  label.fontSize = 14;
-  label.fills = [{ type: "SOLID", color: cfg.textFill }];
-  comp.appendChild(label);
+	const label = figma.createText();
+	label.fontName = { family: "Inter Variable", style: "Medium" };
+	label.characters = "Button";
+	label.fontSize = 14;
+	label.fills = [{ type: "SOLID", color: cfg.textFill }];
+	comp.appendChild(label);
 
-  variants.push(comp);
+	variants.push(comp);
 }
 
 const compSet = figma.combineAsVariants(variants, figma.currentPage);
 compSet.name = "Button";
-
-return { compSetId: compSet.id, variantIds: variants.map(v => v.id) };
+return { compSetId: compSet.id, variantIds: variants.map((variant) => variant.id) };
 ```
 
-**After `combineAsVariants`, variants stack at (0,0).** Manually grid-layout them
-in a separate script:
+### Layout variants after combine
+
+- `combineAsVariants()` often stacks children at `(0,0)`
+- Re-layout in a second script
 
 ```js
 const compSet = await figma.getNodeByIdAsync("COMP_SET_ID");
 let x = 0;
 for (const child of compSet.children) {
-  child.x = x;
-  child.y = 0;
-  x += child.width + 20;
+	child.x = x;
+	child.y = 0;
+	x += child.width + 20;
 }
 compSet.resize(x - 20, compSet.children[0].height);
 return "variants laid out";
 ```
 
-### Component properties
+### Icon size variants
 
-Add TEXT, BOOLEAN, and INSTANCE_SWAP properties:
+- For icon size work:
+  - read the source icon structure
+  - read one reference set that already uses `size`
+  - create one set
+  - verify it
+  - repeat for others
+- Common pattern:
+  - keep original as medium
+  - clone for small and large
+  - resize frame
+  - rescale inner vector or group
+  - recenter content
+  - update stroke weights
+  - combine into variants
+
+```js
+const original = await figma.getNodeByIdAsync("ICON_COMPONENT_ID");
+
+const setStrokes = (node, stroke) => {
+	if ("children" in node) node.children.forEach((child) => setStrokes(child, stroke));
+	if (node.type === "VECTOR") node.strokeWeight = stroke;
+};
+
+const configs = [
+	{ name: "size=medium", size: 24, scale: 1, stroke: 1.5, node: original },
+	{ name: "size=small", size: 16, scale: 16 / 24, stroke: 1.2, node: original.clone() },
+	{ name: "size=large", size: 36, scale: 36 / 24, stroke: 1.8, node: original.clone() },
+];
+
+for (const current of configs) {
+	const comp = current.node;
+	const icon = comp.children[0];
+	comp.name = current.name;
+	comp.resizeWithoutConstraints(current.size, current.size);
+	if (current.scale !== 1) icon.rescale(current.scale);
+	icon.x = (current.size - icon.width) / 2;
+	icon.y = (current.size - icon.height) / 2;
+	setStrokes(comp, current.stroke);
+}
+
+const set = figma.combineAsVariants(configs.map((config) => config.node), original.parent);
+set.name = "icons/MyIcon";
+return { setId: set.id };
+```
+
+## Component properties
+
+### Add properties
+
+- Use text properties for labels
+- Use boolean properties for visibility
+- Use instance swap instead of icon-per-variant patterns
 
 ```js
 const comp = await figma.getNodeByIdAsync("COMPONENT_ID");
-
-// TEXT property — exposes a text node for override
 comp.addComponentProperty("label", "TEXT", "Button");
-
-// BOOLEAN property — shows/hides a layer
 comp.addComponentProperty("showIcon", "BOOLEAN", true);
-
-// INSTANCE_SWAP property — swaps a nested instance
-// preferredValues narrows the picker to specific components
 comp.addComponentProperty("icon", "INSTANCE_SWAP", "DEFAULT_COMPONENT_ID", {
-  preferredValues: [
-    { type: "COMPONENT", key: "ICON_COMPONENT_KEY" },
-  ]
+	preferredValues: [{ type: "COMPONENT", key: "ICON_COMPONENT_KEY" }],
 });
-
 return "properties added";
 ```
 
-**Link properties to child nodes:**
+### Link properties to child nodes
 
 ```js
 const comp = await figma.getNodeByIdAsync("COMPONENT_ID");
-const label = comp.findOne(n => n.type === "TEXT" && n.name === "Label");
-const icon = comp.findOne(n => n.type === "INSTANCE" && n.name === "Icon");
+const label = comp.findOne((node) => node.type === "TEXT" && node.name === "Label");
+const icon = comp.findOne((node) => node.type === "INSTANCE" && node.name === "Icon");
 
-// Link text property to the label node
 label.componentPropertyReferences = { characters: "label" };
-
-// Link boolean property to visibility
 icon.componentPropertyReferences = { visible: "showIcon" };
-
-// Link instance swap
 icon.componentPropertyReferences = { mainComponent: "icon" };
 
 return "properties linked";
 ```
 
-### Override instance text with setProperties
+### Component property tokens
 
-More reliable than direct `node.characters` manipulation:
+- Component property definitions can also be tokenized
+- Inspect `componentPropertyDefinitions[property].boundVariables.defaultValue`
+- Useful when default prop values should follow tokens
+
+```js
+const comp = await figma.getNodeByIdAsync("COMPONENT_ID");
+return comp.componentPropertyDefinitions;
+```
+
+### Override instance properties
+
+- `instance.setProperties()` is usually more reliable than editing inner text directly
+- Use exact property keys such as `label#123:456`
 
 ```js
 const instance = await figma.getNodeByIdAsync("INSTANCE_ID");
-// Read available properties
-const props = instance.componentProperties;
-// Keys look like "label#123:456" — use them exactly
 instance.setProperties({ "label#123:456": "Click me" });
 return "text overridden";
 ```
 
-### INSTANCE_SWAP for icons
+### Variant matrix rule
 
-**Never create a variant per icon.** Use INSTANCE_SWAP instead:
-
-```js
-// Wrong: Button/icon=check, Button/icon=close, Button/icon=arrow...
-// Correct: one INSTANCE_SWAP property that accepts any icon component
-```
-
-### Variant matrix limits
-
-If Size x Style x State > 30 combinations, split into sub-components.
-E.g., create `ButtonBase` with Size x Style, then a separate `ButtonState`
-component that wraps it with state variants.
-
----
+- If combinations go much beyond 30, split the component
+- Example:
+  - `ButtonBase` for size and style
+  - wrapper or state component for state handling
 
 ## Text styles
 
@@ -374,19 +539,17 @@ style.letterSpacing = { unit: "PIXELS", value: -0.5 };
 return { styleId: style.id, name: style.name };
 ```
 
-### Apply a text style
+### Apply a local text style
 
 ```js
 const node = await figma.getNodeByIdAsync("TEXT_NODE_ID");
 const styles = await figma.getLocalTextStylesAsync();
-const heading = styles.find(s => s.name === "Heading/H1");
-if (heading) {
-  node.textStyleId = heading.id;
-}
+const heading = styles.find((style) => style.name === "Heading/H1");
+if (heading) node.textStyleId = heading.id;
 return "style applied";
 ```
 
-### Import library text style
+### Import a library text style
 
 ```js
 const style = await figma.importStyleByKeyAsync("STYLE_KEY");
@@ -395,24 +558,46 @@ node.textStyleId = style.id;
 return "library style applied";
 ```
 
----
+## Paint styles
+
+### Create a paint style
+
+- Use paint styles for reusable fills or color styles
+- Paint styles are not limited to solid colors
+
+```js
+const style = figma.createPaintStyle();
+style.name = "Color/Surface/Primary";
+style.paints = [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }];
+return { styleId: style.id };
+```
+
+### Apply a paint style
+
+```js
+const node = await figma.getNodeByIdAsync("NODE_ID");
+const styles = await figma.getLocalPaintStylesAsync();
+const style = styles.find((item) => item.name === "Color/Surface/Primary");
+if (style) node.fillStyleId = style.id;
+return "paint style applied";
+```
 
 ## Effect styles
 
-### Create a shadow style
+### Create an effect style
 
 ```js
 const style = figma.createEffectStyle();
 style.name = "Shadow/Medium";
 style.effects = [{
-  type: "DROP_SHADOW",
-  visible: true,
-  radius: 16,
-  color: { r: 0, g: 0, b: 0, a: 0.1 },
-  offset: { x: 0, y: 4 },
-  spread: 0,
-  blendMode: "NORMAL",
-  showShadowBehindNode: false,
+	type: "DROP_SHADOW",
+	visible: true,
+	radius: 16,
+	color: { r: 0, g: 0, b: 0, a: 0.1 },
+	offset: { x: 0, y: 4 },
+	spread: 0,
+	blendMode: "NORMAL",
+	showShadowBehindNode: false,
 }];
 return { styleId: style.id };
 ```
@@ -422,43 +607,68 @@ return { styleId: style.id };
 ```js
 const node = await figma.getNodeByIdAsync("NODE_ID");
 const styles = await figma.getLocalEffectStylesAsync();
-const shadow = styles.find(s => s.name === "Shadow/Medium");
-if (shadow) {
-  node.effectStyleId = shadow.id;
-}
+const shadow = styles.find((style) => style.name === "Shadow/Medium");
+if (shadow) node.effectStyleId = shadow.id;
 return "effect applied";
 ```
 
----
+## Naming patterns
 
-## Naming conventions
+- Match the local file when it already has conventions
+- If starting fresh, use concise patterns
 
-Match existing file conventions. If starting fresh:
+### Variables
 
-**Variables** (slash-separated):
+```txt
+color/bg/primary
+color/text/secondary
+color/border/default
+spacing/xs
+spacing/sm
+spacing/md
+spacing/lg
+radius/none
+radius/sm
+radius/md
+radius/lg
+radius/full
 ```
-color/bg/primary     color/text/secondary    color/border/default
-spacing/xs  spacing/sm  spacing/md  spacing/lg  spacing/xl
-radius/none  radius/sm  radius/md  radius/lg  radius/full
+
+### Primitives
+
+```txt
+blue/50 → blue/900
+gray/50 → gray/900
 ```
 
-**Primitives**: `blue/50` → `blue/900`, `gray/50` → `gray/900`
+### Components
 
-**Component names**: `Button`, `Input`, `Card`, `Avatar`, `Badge`
+```txt
+Button
+Input
+Card
+Avatar
+Badge
+```
 
-**Variant names**: `Property=Value, Property=Value`
-E.g. `Size=Medium, Style=Primary, State=Default`
+### Variants
 
----
+```txt
+Size=Medium, Style=Primary, State=Default
+```
 
-## Workflow checklist
+## Validation checklist
 
 | Phase | Action | Validate with |
 |---|---|---|
-| Discovery | List existing collections, variables, components | `figma_run_script` read-only |
-| Tokens | Create collections → primitives → semantics → scopes → code syntax | `figma_run_script` read-back |
-| Components | Create base → variants → properties → link → layout grid | `get_screenshot` |
-| Styles | Create text styles → effect styles | `figma_run_script` read-back |
-| Bindings | Bind variables to component fills, spacing, radii | `get_screenshot` to verify colors |
+| Discovery | list collections, variables, components | `labor_run_script` read-only |
+| Tokens | create collections, primitives, semantics, scopes, syntax | `labor_run_script` read-back |
+| Components | create base, variants, properties, links, layout | `mcp: get_screenshot` \| `labor: labor_zoom_to_node` + manual inspect |
+| Styles | create text and effect styles | `labor_run_script` read-back |
+| Bindings | bind colors, spacing, radii | `mcp: get_screenshot` \| `labor: labor_get_node_full` + `labor_run_script` |
 
-**Validate at every step. Never build on unvalidated work.**
+## Final checks
+
+- Validate every step before building on it
+- Verify the first good component pattern before batching the rest
+- Prefer one validated working recipe over repeated re-discovery
