@@ -65,10 +65,9 @@ let bridgeStartedByUs = false;
 let cachedStatus: { bridge: string; plugin: string } | null = null;
 
 function footerSymbol(bridgeConnected: boolean, mcpReady: boolean): string {
-	if (bridgeConnected && mcpReady) return "✓";
-	if (bridgeConnected) return "◐";
-	if (mcpReady) return "◑";
-	return "○";
+	const bridge = bridgeConnected ? "B" : "◌";
+	const mcp = mcpReady ? "M" : "◌";
+	return `${bridge} ${mcp}`;
 }
 
 function updateFooterStatus(ctx: {
