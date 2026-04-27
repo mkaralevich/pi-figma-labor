@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
-    "build": "esbuild src/server.ts --bundle --platform=node --outfile=../bridge.js",
+    "build": "esbuild src/server.ts --bundle --platform=node --outfile=../extensions/bridge.js",
     "dev": "node --watch --experimental-strip-types src/server.ts",
     "start": "node --experimental-strip-types src/server.ts"
   },

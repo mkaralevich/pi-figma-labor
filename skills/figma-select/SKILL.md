@@ -3,215 +3,235 @@ name: figma-select
 description: Use when the user wants to find, select, filter, list, enumerate, inspect, read, extract, audit, or batch-select nodes in Figma — by name, type, property, variant, style, text content, variable binding, or spatial relationship. Covers searching the layer tree, listing node names, selecting multiple nodes, filtering by criteria, reading structure, extracting styles, inspecting variable bindings, and navigating complex component hierarchies.
 ---
 
-# Figma Select & Inspect
+# Figma Select
 
-Instructions for finding, selecting, and inspecting nodes on the Figma canvas using
-figma-labor tools.
+Find, inspect, and batch-read Figma nodes with labor tools.
 
-## Key principle: discover structure first, extract second
+## Core workflow
 
-**STRICT RULE: Do NOT attempt any name listing, property reading, or data extraction
-before you have seen the tree structure. Your first `figma_run_script` call MUST be a
-structure discovery call.** No exceptions.
+- Discover structure first
+- Extract second
+- Keep reads tight
+- Prefer one discovery call and one extraction call
+- Avoid drilling into many items one by one
 
-Step 1 — discover the shape (always do this first):
+## Discovery first
+
+- First `labor_run_script` call should show structure
+- Do not start with random property reads
+- Often a shallow tree is enough to answer the task
+- Good target:
+  - 1 discovery call
+  - 1 extraction call
 
 ```js
 const root = await figma.getNodeByIdAsync("NODE_ID");
+
 function walk(node, depth) {
-  const info = { name: node.name, type: node.type, id: node.id };
-  if (node.type === "TEXT") info.chars = node.characters;
-  if (depth > 0 && "children" in node) {
-    info.children = node.children.map(c => walk(c, depth - 1));
-  }
-  return info;
+	const info = { name: node.name, type: node.type, id: node.id };
+	if (node.type === "TEXT") info.chars = node.characters;
+	if (depth > 0 && "children" in node) {
+		info.children = node.children.map((child) => walk(child, depth - 1));
+	}
+	return info;
 }
+
 return walk(root, 2);
 ```
-
-Step 2 — read the discovery output carefully. If the structure already reveals the
-data you need (e.g. TEXT nodes with characters, COMPONENT_SET names), write one
-batch extraction call. **Do NOT drill into individual items to "confirm" — the
-discovery output is your confirmation.**
-
-**Target: 1 discovery call + 1 extraction call = 2 `figma_run_script` calls total.
-Every additional call is a failure.**
 
 ## Core tools
 
 | Tool | Use for |
 |---|---|
-| `figma_get_selection` | Read what the user currently has selected |
-| `figma_get_children` | List direct children of a node (or current page if omitted) |
-| `figma_get_node` | Get properties of a known node by ID |
-| `figma_get_node_full` | Get all properties including layout, constraints, padding |
-| `figma_select_node` | Select a node and zoom viewport to it |
-| `figma_run_script` | Advanced queries — `findAll`, `findOne`, multi-select, inspection |
+| `labor_get_selection` | read current selection |
+| `labor_get_children` | list direct children |
+| `labor_get_node` | read basic properties of a known node |
+| `labor_get_node_full` | read full layout and constraint data |
+| `labor_select_node` | select one node and zoom to it |
+| `labor_run_script` | advanced search, filtering, inspection, batch reads |
 
-## Selecting a single node
+## Selection patterns
+
+### Select one node
 
 ```js
-// figma_select_node is the simplest — takes a nodeId, selects it, zooms to it
-figma_select_node({ nodeId: "123:456" })
+labor_select_node({ nodeId: "123:456" })
 ```
 
-## Selecting multiple nodes
-
-`figma_select_node` only selects one. For multi-select, use `figma_run_script`:
+### Select multiple nodes
 
 ```js
 const ids = ["123:456", "123:457", "123:458"];
 const nodes = [];
 for (const id of ids) {
-  const n = await figma.getNodeByIdAsync(id);
-  if (n) nodes.push(n);
+	const node = await figma.getNodeByIdAsync(id);
+	if (node) nodes.push(node);
 }
 figma.currentPage.selection = nodes;
 figma.viewport.scrollAndZoomIntoView(nodes);
 return `Selected ${nodes.length} nodes`;
 ```
 
-## Finding nodes by name
+### Select all direct children of a selected frame
 
 ```js
-// Exact match
-const nodes = figma.currentPage.findAll(n => n.name === "Button");
-
-// Contains
-const nodes = figma.currentPage.findAll(n => n.name.includes("icon"));
-
-// Regex
-const nodes = figma.currentPage.findAll(n => /^Header\//.test(n.name));
+const selected = figma.currentPage.selection[0];
+if (!selected || !("children" in selected)) return "Select a frame first";
+figma.currentPage.selection = [...selected.children];
+return `Selected ${selected.children.length} children`;
 ```
 
-## Finding nodes by type
+## Search patterns
+
+### Find by name
 
 ```js
-// All text nodes
-const texts = figma.currentPage.findAll(n => n.type === "TEXT");
+const exact = figma.currentPage.findAll((node) => node.name === "Button");
+const contains = figma.currentPage.findAll((node) => node.name.includes("icon"));
+const regex = figma.currentPage.findAll((node) => /^Header\//.test(node.name));
+return {
+	exact: exact.length,
+	contains: contains.length,
+	regex: regex.length,
+};
+```
 
-// All instances of a specific component
-const instances = figma.currentPage.findAll(n => n.type === "INSTANCE");
-const filtered = [];
-for (const inst of instances) {
-  const main = await inst.getMainComponentAsync();
-  if (main?.parent?.name === "Button") filtered.push(inst);
+### Find by type
+
+```js
+const texts = figma.currentPage.findAll((node) => node.type === "TEXT");
+return texts.map((node) => ({ id: node.id, name: node.name, text: node.characters }));
+```
+
+### Find instances of one component
+
+```js
+const instances = figma.currentPage.findAll((node) => node.type === "INSTANCE");
+const matches = [];
+for (const instance of instances) {
+	const main = await instance.getMainComponentAsync();
+	if (main?.name === "Button" || main?.parent?.name === "Button") {
+		matches.push({ id: instance.id, name: instance.name });
+	}
 }
+return matches;
 ```
 
-## Finding nodes by property
+### Find by property
 
 ```js
-// Nodes with a specific fill color
-const red = figma.currentPage.findAll(n =>
-  "fills" in n && Array.isArray(n.fills) &&
-  n.fills.some(f => f.type === "SOLID" && f.color.r > 0.9 && f.color.g < 0.1)
+const hidden = figma.currentPage.findAll((node) => node.visible === false);
+const faded = figma.currentPage.findAll((node) => node.opacity < 0.5);
+const red = figma.currentPage.findAll(
+	(node) =>
+		"fills" in node &&
+		Array.isArray(node.fills) &&
+		node.fills.some(
+			(fill) => fill.type === "SOLID" && fill.color.r > 0.9 && fill.color.g < 0.1
+		)
 );
-
-// Hidden nodes
-const hidden = figma.currentPage.findAll(n => n.visible === false);
-
-// Nodes with specific opacity
-const faded = figma.currentPage.findAll(n => n.opacity < 0.5);
+return {
+	hidden: hidden.length,
+	faded: faded.length,
+	red: red.length,
+};
 ```
 
-## Finding nodes by text content
+### Find by text content
 
 ```js
 const query = "Submit";
 const texts = figma.currentPage.findAll(
-  n => n.type === "TEXT" && n.characters.includes(query)
+	(node) => node.type === "TEXT" && node.characters.includes(query)
 );
-figma.currentPage.selection = texts;
-return texts.map(t => ({ id: t.id, text: t.characters }));
+return texts.map((node) => ({ id: node.id, text: node.characters }));
 ```
 
-## Async node access
+## Search rules
 
-Always use async node access in `figma_run_script`:
-
-```js
-// Correct
-const node = await figma.getNodeByIdAsync("123:456");
-
-// Wrong — throws with documentAccess: dynamic-page
-const node = figma.getNodeById("123:456");
-```
-
-## Scoping searches
-
-Never search the entire page on large files. Scope to a known parent:
+- Always use async node access in `labor_run_script`
+- Scope searches to a known parent when possible
+- Avoid full-page scans on large files
+- Do not use `figma.getNodeById()`; use `await figma.getNodeByIdAsync()`
+- With dynamic-page loading, node-scoped searches are safer than whole-document scans
 
 ```js
 const frame = await figma.getNodeByIdAsync("123:456");
-const texts = frame.findAll(n => n.type === "TEXT");
+const texts = frame.findAll((node) => node.type === "TEXT");
+return texts.length;
 ```
 
-**Exception:** `findAll` on INSTANCE nodes crashes the proxy. Use the page-level
-workaround:
+## Instance caveat
+
+- `findAll()` on `INSTANCE` nodes crashes the proxy
+- Use page-level suffix matching instead
+- For large instance-heavy reads, enable `figma.skipInvisibleInstanceChildren = true` when invisible descendants do not matter
 
 ```js
+figma.skipInvisibleInstanceChildren = true;
 const instanceId = "I123:456";
-const children = figma.currentPage.findAll(
-  n => n.id.startsWith(instanceId + ";")
-);
+const children = figma.currentPage.findAll((node) => node.id.startsWith(instanceId + ";"));
+return children.map((node) => ({ id: node.id, name: node.name, type: node.type }));
 ```
-
----
 
 ## Inspection patterns
 
-### Extract all styles from a frame
+### Extract styles from a subtree
 
-Extract fills, effects, text styles, and corner radii from a subtree to understand
-or reproduce the design language:
+- Good for understanding local design language
+- Common outputs:
+  - fills
+  - fonts
+  - corner radii
+  - effect types
 
 ```js
 const root = await figma.getNodeByIdAsync("FRAME_ID");
 const styles = { fills: new Map(), effects: [], fonts: new Map(), radii: new Set() };
 
-root.findAll(n => {
-  // Fills
-  if ("fills" in n && Array.isArray(n.fills)) {
-    for (const f of n.fills) {
-      if (f.type === "SOLID" && f.visible !== false) {
-        const key = `${f.color.r.toFixed(3)},${f.color.g.toFixed(3)},${f.color.b.toFixed(3)},${f.opacity ?? 1}`;
-        styles.fills.set(key, { color: f.color, opacity: f.opacity ?? 1 });
-      }
-    }
-  }
-  // Effects
-  if ("effects" in n && n.effects?.length) {
-    for (const e of n.effects) {
-      styles.effects.push({ type: e.type, radius: e.radius });
-    }
-  }
-  // Fonts
-  if (n.type === "TEXT") {
-    const fn = n.fontName;
-    if (fn && fn !== figma.mixed) {
-      const key = `${fn.family}/${fn.style}/${n.fontSize}`;
-      styles.fonts.set(key, { family: fn.family, style: fn.style, size: n.fontSize });
-    }
-  }
-  // Corner radii
-  if ("cornerRadius" in n && n.cornerRadius > 0) {
-    styles.radii.add(n.cornerRadius);
-  }
-  return false;
+root.findAll((node) => {
+	if ("fills" in node && Array.isArray(node.fills)) {
+		for (const fill of node.fills) {
+			if (fill.type === "SOLID" && fill.visible !== false) {
+				const key = `${fill.color.r.toFixed(3)},${fill.color.g.toFixed(3)},${fill.color.b.toFixed(3)},${fill.opacity ?? 1}`;
+				styles.fills.set(key, { color: fill.color, opacity: fill.opacity ?? 1 });
+			}
+		}
+	}
+
+	if ("effects" in node && node.effects?.length) {
+		for (const effect of node.effects) {
+			styles.effects.push({ type: effect.type, radius: effect.radius });
+		}
+	}
+
+	if (node.type === "TEXT") {
+		const fontName = node.fontName;
+		if (fontName && fontName !== figma.mixed) {
+			const key = `${fontName.family}/${fontName.style}/${node.fontSize}`;
+			styles.fonts.set(key, { family: fontName.family, style: fontName.style, size: node.fontSize });
+		}
+	}
+
+	if ("cornerRadius" in node && node.cornerRadius > 0) {
+		styles.radii.add(node.cornerRadius);
+	}
+
+	return false;
 });
 
 return {
-  fills: [...styles.fills.values()],
-  fonts: [...styles.fonts.values()],
-  radii: [...styles.radii],
-  effectTypes: [...new Set(styles.effects.map(e => e.type))],
+	fills: [...styles.fills.values()],
+	fonts: [...styles.fonts.values()],
+	radii: [...styles.radii],
+	effectTypes: [...new Set(styles.effects.map((effect) => effect.type))],
 };
 ```
 
 ### Extract bound variables from a subtree
 
-Find all design variables used in a frame — colors, spacing, radii:
+- Useful for DS audits
+- Reads where variables are actually consumed
 
 ```js
 const root = await figma.getNodeByIdAsync("FRAME_ID");
@@ -219,177 +239,219 @@ const varMap = new Map();
 
 const nodes = root.findAll(() => true);
 for (const node of nodes) {
-  const bv = node.boundVariables;
-  if (!bv) continue;
-  for (const [prop, binding] of Object.entries(bv)) {
-    const bindings = Array.isArray(binding) ? binding : [binding];
-    for (const b of bindings) {
-      if (b?.id && !varMap.has(b.id)) {
-        const v = await figma.variables.getVariableByIdAsync(b.id);
-        if (v) varMap.set(b.id, {
-          name: v.name, id: v.id, key: v.key,
-          type: v.resolvedType, remote: v.remote,
-          boundTo: prop, onNode: node.name
-        });
-      }
-    }
-  }
+	const boundVariables = node.boundVariables;
+	if (!boundVariables) continue;
+
+	for (const [prop, binding] of Object.entries(boundVariables)) {
+		const bindings = Array.isArray(binding) ? binding : [binding];
+		for (const item of bindings) {
+			if (item?.id && !varMap.has(item.id)) {
+				const variable = await figma.variables.getVariableByIdAsync(item.id);
+				if (variable) {
+					varMap.set(item.id, {
+						name: variable.name,
+						id: variable.id,
+						key: variable.key,
+						type: variable.resolvedType,
+						remote: variable.remote,
+						boundTo: prop,
+						onNode: node.name,
+					});
+				}
+			}
+		}
+	}
 }
+
 return [...varMap.values()];
 ```
 
-### Extract component map from a frame
+### Extract a component map from a subtree
 
-Find all unique components used as instances inside a frame:
+- Finds unique components used inside a frame
+- Good for audits and migration work
 
 ```js
 const root = await figma.getNodeByIdAsync("FRAME_ID");
 const uniqueSets = new Map();
 
-const instances = root.findAll(n => n.type === "INSTANCE");
-for (const inst of instances) {
-  const mc = await inst.getMainComponentAsync();
-  if (!mc) continue;
-  const cs = mc.parent?.type === "COMPONENT_SET" ? mc.parent : null;
-  const key = cs ? cs.id : mc.id;
-  const name = cs ? cs.name : mc.name;
-  if (!uniqueSets.has(key)) {
-    uniqueSets.set(key, {
-      name, id: key, isSet: !!cs,
-      sampleVariant: mc.name, instanceCount: 1
-    });
-  } else {
-    uniqueSets.get(key).instanceCount++;
-  }
+const instances = root.findAll((node) => node.type === "INSTANCE");
+for (const instance of instances) {
+	const main = await instance.getMainComponentAsync();
+	if (!main) continue;
+	const set = main.parent?.type === "COMPONENT_SET" ? main.parent : null;
+	const key = set ? set.id : main.id;
+	const name = set ? set.name : main.name;
+
+	if (!uniqueSets.has(key)) {
+		uniqueSets.set(key, {
+			name,
+			id: key,
+			isSet: !!set,
+			sampleVariant: main.name,
+			instanceCount: 1,
+		});
+	} else {
+		uniqueSets.get(key).instanceCount++;
+	}
 }
+
 return [...uniqueSets.values()];
 ```
 
-### Extract applied text and effect styles
+### Extract applied styles
 
-Find all text styles and effect styles used in a frame:
+- Read text styles and effect styles used in a subtree
 
 ```js
 const root = await figma.getNodeByIdAsync("FRAME_ID");
 const styles = { text: new Map(), effect: new Map() };
 
-root.findAll(n => {
-  if ("textStyleId" in n && n.textStyleId) {
-    const s = figma.getStyleById(n.textStyleId);
-    if (s) styles.text.set(s.id, { name: s.name, id: s.id, key: s.key });
-  }
-  if ("effectStyleId" in n && n.effectStyleId) {
-    const s = figma.getStyleById(n.effectStyleId);
-    if (s) styles.effect.set(s.id, { name: s.name, id: s.id, key: s.key });
-  }
-  return false;
-});
+for (const node of root.findAll(() => true)) {
+	if ("textStyleId" in node && node.textStyleId) {
+		const style = await figma.getStyleByIdAsync(node.textStyleId);
+		if (style) styles.text.set(style.id, { name: style.name, id: style.id, key: style.key });
+	}
+	if ("effectStyleId" in node && node.effectStyleId) {
+		const style = await figma.getStyleByIdAsync(node.effectStyleId);
+		if (style) styles.effect.set(style.id, { name: style.name, id: style.id, key: style.key });
+	}
+}
 
 return {
-  textStyles: [...styles.text.values()],
-  effectStyles: [...styles.effect.values()],
+	textStyles: [...styles.text.values()],
+	effectStyles: [...styles.effect.values()],
 };
 ```
 
-### Audit auto-layout properties
+### Audit auto-layout
 
-Read the full layout configuration of a frame and its children:
+- Read auto-layout settings on a frame and its descendants
+- Good for diagnosing spacing, padding, fill, and hug issues
 
 ```js
 const root = await figma.getNodeByIdAsync("FRAME_ID");
-function layoutInfo(n) {
-  if (!("layoutMode" in n) || n.layoutMode === "NONE") return null;
-  return {
-    name: n.name, id: n.id,
-    layoutMode: n.layoutMode,
-    primaryAxisSizingMode: n.primaryAxisSizingMode,
-    counterAxisSizingMode: n.counterAxisSizingMode,
-    primaryAxisAlignItems: n.primaryAxisAlignItems,
-    counterAxisAlignItems: n.counterAxisAlignItems,
-    itemSpacing: n.itemSpacing,
-    paddingTop: n.paddingTop, paddingRight: n.paddingRight,
-    paddingBottom: n.paddingBottom, paddingLeft: n.paddingLeft,
-    children: n.children?.length,
-  };
+
+function layoutInfo(node) {
+	if (!("layoutMode" in node) || node.layoutMode === "NONE") return null;
+	return {
+		name: node.name,
+		id: node.id,
+		layoutMode: node.layoutMode,
+		primaryAxisSizingMode: node.primaryAxisSizingMode,
+		counterAxisSizingMode: node.counterAxisSizingMode,
+		primaryAxisAlignItems: node.primaryAxisAlignItems,
+		counterAxisAlignItems: node.counterAxisAlignItems,
+		itemSpacing: node.itemSpacing,
+		paddingTop: node.paddingTop,
+		paddingRight: node.paddingRight,
+		paddingBottom: node.paddingBottom,
+		paddingLeft: node.paddingLeft,
+		children: node.children?.length,
+	};
 }
+
 const layouts = [];
-root.findAll(n => {
-  const info = layoutInfo(n);
-  if (info) layouts.push(info);
-  return false;
+root.findAll((node) => {
+	const info = layoutInfo(node);
+	if (info) layouts.push(info);
+	return false;
 });
 return layouts;
 ```
 
----
+## Component sets and variants
 
-## Working with COMPONENT_SETs and variants
-
-A COMPONENT_SET contains multiple COMPONENT children (variants). **Never assume there
-is only one variant.** Always check `componentPropertyDefinitions` or iterate children.
+- Never assume a `COMPONENT_SET` has only one variant
+- Always read variant children or `componentPropertyDefinitions`
+- If the desired variant is ambiguous, ask the user
 
 ```js
 const compSet = await figma.getNodeByIdAsync("COMP_SET_ID");
 return {
-  name: compSet.name,
-  propDefs: compSet.componentPropertyDefinitions,
-  variants: compSet.children.map(v => ({ id: v.id, name: v.name }))
+	name: compSet.name,
+	propDefs: compSet.componentPropertyDefinitions,
+	variants: compSet.children.map((child) => ({ id: child.id, name: child.name })),
 };
 ```
 
-When instantiating from a COMPONENT_SET:
-- Find the COMPONENT child whose `name` matches the desired property combo
-  (e.g. `"size=medium, variant=outline"`)
-- **Ask the user which variants they want if the task is ambiguous**
-
-## Navigating component hierarchies
+## Component hierarchy navigation
 
 ```js
 let current = await figma.getNodeByIdAsync("123:456");
 while (current && current.type !== "COMPONENT" && current.type !== "COMPONENT_SET") {
-  current = current.parent;
+	current = current.parent;
 }
 return current ? { type: current.type, name: current.name, id: current.id } : null;
 ```
 
-## Common patterns
+## Batch-read repeated structures
 
-**Select all instances of a component on the page:**
+- Read repeated rows, cards, icons, or nav items in one pass
+- Do not use one tool call per item
+
+```js
+const frame = await figma.getNodeByIdAsync("FRAME_ID");
+if (!frame || !("children" in frame)) return "not a frame";
+return frame.children.map((child) => ({
+	name: child.children?.find((node) => node.type === "TEXT")?.characters,
+	componentId: child.children?.find((node) => node.type !== "TEXT")?.id,
+}));
+```
+
+## Quick recipes
+
+### Select all instances of one component on the page
 
 ```js
 const componentName = "Card";
-const instances = figma.currentPage.findAll(n => n.type === "INSTANCE");
+const instances = figma.currentPage.findAll((node) => node.type === "INSTANCE");
 const matches = [];
-for (const inst of instances) {
-  const main = await inst.getMainComponentAsync();
-  if (main?.name === componentName || main?.parent?.name === componentName) {
-    matches.push(inst);
-  }
+for (const instance of instances) {
+	const main = await instance.getMainComponentAsync();
+	if (main?.name === componentName || main?.parent?.name === componentName) {
+		matches.push(instance);
+	}
 }
 figma.currentPage.selection = matches;
 figma.viewport.scrollAndZoomIntoView(matches);
 return `Selected ${matches.length} instances of ${componentName}`;
 ```
 
-**Select all direct children of selected frame:**
+### Read current selection colors quickly
 
 ```js
-const sel = figma.currentPage.selection[0];
-if (!sel || !("children" in sel)) return "Select a frame first";
-figma.currentPage.selection = [...sel.children];
-return `Selected ${sel.children.length} children`;
+const colors = figma.getSelectionColors();
+return colors
+	? {
+		paints: colors.paints.length,
+		styles: colors.styles.map((style) => ({ id: style.id, name: style.name })),
+	}
+	: "No selection colors";
 ```
 
-**Batch-read repeated structures (icons, cards, rows, etc.):**
+### Audit selection colors
+
+- Use `figma.getSelectionColors()` for a fast color audit of the current selection
+- Good for:
+  - checking raw paints
+  - checking applied paint styles
+  - spotting color drift before deeper inspection
 
 ```js
-const frame = await figma.getNodeByIdAsync("FRAME_ID");
-if (!frame || !("children" in frame)) return "not a frame";
-return frame.children.map(c => ({
-  name: c.children?.find(n => n.type === "TEXT")?.characters,
-  componentId: c.children?.find(n => n.type !== "TEXT")?.id
-}));
+const colors = figma.getSelectionColors();
+if (!colors) return "No selection or too many colors";
+return {
+	paintCount: colors.paints.length,
+	styleCount: colors.styles.length,
+	styles: colors.styles.map((style) => ({ name: style.name, id: style.id })),
+};
 ```
 
-This pattern works for any repeated structure — table rows, card lists, nav items.
-**One script call to read N items, not N tool calls.**
+## Final rules
+
+- Discover before extracting
+- Use async APIs
+- Scope reads whenever possible
+- Prefer batch reads over repeated tool calls
+- Read one good reference and reuse that pattern
