@@ -22,9 +22,11 @@ Work with variables, tokens, components, variants, and styles using labor tools.
 - Always check what already exists before creating anything
 - Keep reads tight
 - Prefer local inspection over broad scans
+- Inspect existing screens and instances first when they already use the target design system
 - For most DS tasks, inspect only:
   - target collection, component, or style
   - one nearby good reference
+  - one existing screen or instance using the same system when available
   - then apply the same pattern
 
 ## Reuse priority

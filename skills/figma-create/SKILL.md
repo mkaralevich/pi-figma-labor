@@ -13,6 +13,8 @@ Build new elements and compose them into existing layouts with labor tools.
 - Create in small steps
 - Return IDs from every mutation script
 - Verify the first working pattern before batching
+- Validate section by section, not only at the end
+- Check for clipped text, overlaps, placeholder text, and wrong variants
 - Use this verification pattern:
   - `mcp: get_screenshot`
   - `labor: labor_zoom_to_node` + manual inspect
@@ -44,6 +46,7 @@ Build new elements and compose them into existing layouts with labor tools.
 - For most tasks, read only:
   - target node or parent
   - one nearby reference sibling
+  - one existing screen or instance using the same design language when available
   - then start building
 
 ```js
@@ -122,6 +125,8 @@ return { cloneId: clone.id, x: clone.x, y: clone.y };
 ## New container frames
 
 - Prefer auto-layout for new containers
+- Create the wrapper first, then build sections directly inside it
+- Avoid building top-level pieces first and reparenting later
 - Typical rule of thumb inside auto-layout:
   - width is usually fill
   - height is usually hug
@@ -169,6 +174,8 @@ frame.y = 0;
 
 ## Text nodes
 
+- Prefer instance or component property text overrides over direct text edits when available
+- Use direct text edits only when the text is not controlled by component properties
 - Always load fonts before changing text properties
 
 ```js

@@ -18,6 +18,12 @@
 | `get_variable_defs`    | `labor_run_script`                                                |
 | `search_design_system` | none                                                              |
 
+## MCP asset rules
+
+- If MCP returns image or SVG assets, use those assets directly
+- Do not create placeholders if the asset already exists in the MCP response
+- Do not swap in unrelated icon packages or substitute assets when MCP provides the design asset
+
 ## Workflow
 
 - Read selection first
