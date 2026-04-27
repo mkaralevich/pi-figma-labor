@@ -6,7 +6,7 @@ Connects [pi-coding-agent](https://github.com/badlogic/pi-mono) to Figma.
 
 - Uses WS connection via local bridge that comes with pi extension
 - Uses [Figma plugin API](https://developers.figma.com/docs/plugins/api/api-reference/), so you can do everything it allows
-- Optionally uses [Figma MCP](https://github.com/nicepkg/figma-mcp) for screenshots and design context if available
+- Uses [Figma MCP](https://github.com/nicepkg/figma-mcp) for screenshots and design context if available
 
 ## Install
 
@@ -17,28 +17,16 @@ pi install https://github.com/mkaralevich/pi-figma-labor
 ## Use
 
 - Bridge auto-starts when pi launches
-- Footer status:
-  - `figma-labor ◌ M` MCP available
-  - `figma-labor B ◌` Bridge available
-  - `figma-labor B M` Bridge + MCP avialble
-  - `figma-labor ◌ ◌` Both not available
-
-- In Figma, switch to Design Mode
-- Open Pi Labor plugin ([Shopify](https://www.figma.com/community/plugin/1611556075783258900/figma-labor)) | (Public TBD) to start connection
+- In Figma, switch to Design Mode and open Pi Labor plugin ([Shopify](https://www.figma.com/community/plugin/1611556075783258900/figma-labor) | Public TBD)
 - Ask your `pi` to do things
 
-Use `figma-labor-stop` and `figma-labor-start` if you want to control server manually.
+### Figma MCP
 
-## Figma MCP
+Desktop Figma MCP support is bundled in this repo. To enable:
 
-Desktop Figma MCP support is bundled in this repo.
-
-Enable it in Figma desktop app:
-
-1. Open a Design file
+1. Open design file
 2. Switch to Dev Mode
 3. Inspect panel → MCP server → Enable desktop MCP server
-4. Check status with `/figma-mcp`
 
 Optional port override:
 
@@ -46,16 +34,16 @@ Optional port override:
 FIGMA_MCP_PORT=3845 pi
 ```
 
-## MCP ↔ Labor
+### Commands
 
-If MCP is unvavailable, Labor will use Figma API equivalent.
 
-| MCP tool             | labor equivalent                                                  |
-| -------------------- | ----------------------------------------------------------------- |
-| `get_screenshot`     | `labor_zoom_to_node` + manual inspect                             |
-| `get_design_context` | `labor_get_node_full` + `labor_get_children` + `labor_run_script` |
-| `get_metadata`       | `labor_get_children` + `labor_run_script`                         |
-| `get_variable_defs`  | `labor_run_script`                                                |
+| Command              | Description                                           |
+| -------------------- | ----------------------------------------------------- |
+| `/figma-labor-start` | Start bridge server manually                          |
+| `/figma-labor-stop`  | Stop bridge server manually                           |
+| `/figma-labor`       | Show bridge status and Figma plugin connection status |
+| `/figma-mcp`         | Show Figma MCP server status and list available tools |
+
 
 ## How it works
 
@@ -68,9 +56,23 @@ If MCP is unvavailable, Labor will use Figma API equivalent.
 . Figma canvas
 ```
 
-## Tools
+## MCP ↔ Labor
 
-Dynamic MCP tools are registered when the desktop MCP server is enabled.
+If MCP is unvavailable, Labor will use Figma API equivalent.
+
+
+| MCP tool             | labor equivalent                                                  |
+| -------------------- | ----------------------------------------------------------------- |
+| `get_screenshot`     | `labor_zoom_to_node` + manual inspect                             |
+| `get_design_context` | `labor_get_node_full` + `labor_get_children` + `labor_run_script` |
+| `get_metadata`       | `labor_get_children` + `labor_run_script`                         |
+| `get_variable_defs`  | `labor_run_script`                                                |
+
+
+## Available tools
+
+Figma MCP tools are registered when the desktop MCP server is enabled.
+
 
 | Tool                              | Description                                                    |
 | --------------------------------- | -------------------------------------------------------------- |
@@ -99,7 +101,19 @@ Dynamic MCP tools are registered when the desktop MCP server is enabled.
 | `labor_run_script`                | Run arbitrary JavaScript in the Figma plugin context           |
 | `labor_undo`                      | Undo the last operation                                        |
 
-## Rebuilding the bridge
+
+## Available skills
+
+
+| Skill                 | Description                                                     |
+| --------------------- | --------------------------------------------------------------- |
+| `figma-create`        | Create, clone, compose, and insert UI in Figma                  |
+| `figma-design-system` | Work with variables, tokens, components, variants, and styles   |
+| `figma-select`        | Find, inspect, extract, and batch-select Figma nodes            |
+| `figma-prototype`     | (WIP) Prototype flows, reactions, transitions, and start points |
+
+
+## Development
 
 If you modify `bridge-src/src/server.ts`:
 

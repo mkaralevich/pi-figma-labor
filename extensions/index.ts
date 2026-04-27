@@ -569,7 +569,7 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	pi.registerCommand("figma-labor-end", {
+	pi.registerCommand("figma-labor-stop", {
 		description: "Stop the figma-labor bridge server",
 		handler: async (_args, ctx) => {
 			stopPolling();
