@@ -6,7 +6,7 @@ Connects [pi-coding-agent](https://github.com/badlogic/pi-mono) to Figma.
 
 - Uses WS connection via local bridge that comes with pi extension
 - Uses [Figma plugin API](https://developers.figma.com/docs/plugins/api/api-reference/), so you can do everything it allows
-- Uses [Figma MCP]([https://github.com/nicepkg/figma-mcp](https://help.figma.com/hc/en-us/articles/32132100833559-Guide-to-the-Figma-MCP-server)) for screenshots and design context if available
+- Uses [Figma MCP](https://help.figma.com/hc/en-us/articles/32132100833559-Guide-to-the-Figma-MCP-server) for screenshots and design context if available
 
 ## Install
 
