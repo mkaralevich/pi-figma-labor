@@ -76,7 +76,7 @@ function updateFooterStatus(ctx: {
 	};
 }) {
 	const bridgeConnected = cachedStatus?.plugin === "connected";
-	ctx.ui.setStatus("figma-labor", `figma-labor ${footerSymbol(bridgeConnected, mcpConnected)}`);
+	ctx.ui.setStatus("labor", `labor ${footerSymbol(bridgeConnected, mcpConnected)}`);
 }
 
 // ## BRIDGE HTTP
@@ -391,6 +391,64 @@ function formatMcpLabel(name: string): string {
 		.join(" ");
 }
 
+function normalizeMcpNodeId(value: string): string {
+	const squashed = value.replace(/\s+/g, "").trim();
+	if (!squashed) return squashed;
+
+	try {
+		const url = new URL(squashed);
+		const fromQuery = url.searchParams.get("node-id") ?? url.searchParams.get("nodeId");
+		if (fromQuery) return normalizeMcpNodeId(fromQuery);
+	} catch {}
+
+	const queryMatch = squashed.match(/[?&]node-id=([0-9]+(?:[:-][0-9]+)?)/i);
+	if (queryMatch?.[1]) return normalizeMcpNodeId(queryMatch[1]);
+
+	const plainMatch = squashed.match(/\b([0-9]+[:-][0-9]+)\b/);
+	if (!plainMatch) return squashed;
+
+	return plainMatch[1].replace(/-/g, ":");
+}
+
+function normalizeMcpArgs(name: string, args: Record<string, unknown>): Record<string, unknown> {
+	const next = { ...args };
+	if (
+		typeof next.nodeId === "string" &&
+		[
+			"get_design_context",
+			"get_screenshot",
+			"get_metadata",
+			"get_variable_defs",
+			"get_code_connect_map",
+			"add_code_connect_map",
+			"get_code_connect_suggestions",
+			"send_code_connect_mappings",
+			"get_figjam",
+		].includes(name)
+	) {
+		next.nodeId = normalizeMcpNodeId(next.nodeId);
+	}
+	return next;
+}
+
+async function callMcpToolWithRetry(
+	name: string,
+	args: Record<string, unknown>,
+	signal?: AbortSignal
+): Promise<McpToolResult> {
+	try {
+		return await callMcpTool(name, args, signal);
+	} catch (error: unknown) {
+		const message = error instanceof Error ? error.message : String(error);
+		if (!message.toLowerCase().includes("aborted")) throw error;
+
+		mcpSessionId = undefined;
+		const ok = await initializeMcpSession();
+		if (!ok) throw error;
+		return await callMcpTool(name, args);
+	}
+}
+
 function registerFigmaMcp(pi: ExtensionAPI) {
 	function registerMcpTools(tools: McpTool[]) {
 		mcpAvailableTools = tools.map((tool) => ({ name: tool.name, description: tool.description }));
@@ -418,7 +476,11 @@ function registerFigmaMcp(pi: ExtensionAPI) {
 					}
 
 					try {
-						const result = await callMcpTool(tool.name, params as Record<string, unknown>, signal);
+						const normalizedParams = normalizeMcpArgs(
+							tool.name,
+							params as Record<string, unknown>
+						);
+						const result = await callMcpToolWithRetry(tool.name, normalizedParams, signal);
 						return {
 							content: convertMcpContent(result.content),
 							isError: result.isError ?? false,

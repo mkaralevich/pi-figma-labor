@@ -176,6 +176,48 @@ function formatLabel(name: string): string {
 		.join(" ");
 }
 
+function normalizeNodeId(value: string): string {
+	const trimmed = value.trim();
+	if (!trimmed) return trimmed;
+
+	try {
+		const url = new URL(trimmed);
+		const fromQuery = url.searchParams.get("node-id") ?? url.searchParams.get("nodeId");
+		if (fromQuery) {
+			return normalizeNodeId(fromQuery);
+		}
+	} catch {}
+
+	const queryMatch = trimmed.match(/[?&]node-id=([0-9]+(?:[:-][0-9]+)?)/i);
+	if (queryMatch?.[1]) return normalizeNodeId(queryMatch[1]);
+
+	const plainMatch = trimmed.match(/\b([0-9]+[:-][0-9]+)\b/);
+	if (!plainMatch) return trimmed;
+
+	return plainMatch[1].replace(/-/g, ":");
+}
+
+function normalizeToolArgs(name: string, args: Record<string, unknown>): Record<string, unknown> {
+	const next = { ...args };
+	if (
+		typeof next.nodeId === "string" &&
+		[
+			"get_design_context",
+			"get_screenshot",
+			"get_metadata",
+			"get_variable_defs",
+			"get_code_connect_map",
+			"add_code_connect_map",
+			"get_code_connect_suggestions",
+			"send_code_connect_mappings",
+			"get_figjam",
+		].includes(name)
+	) {
+		next.nodeId = normalizeNodeId(next.nodeId);
+	}
+	return next;
+}
+
 function registerMcpTools(pi: ExtensionAPI, tools: McpTool[]) {
 	availableTools = tools.map((tool) => ({
 		name: tool.name,
@@ -208,7 +250,11 @@ function registerMcpTools(pi: ExtensionAPI, tools: McpTool[]) {
 				}
 
 				try {
-					const result = await callTool(tool.name, params as Record<string, unknown>, signal);
+					const normalizedParams = normalizeToolArgs(
+						tool.name,
+						params as Record<string, unknown>
+					);
+					const result = await callTool(tool.name, normalizedParams, signal);
 					return {
 						content: convertContent(result.content),
 						isError: result.isError ?? false,
