@@ -8,6 +8,15 @@ Connects [pi-coding-agent](https://github.com/badlogic/pi-mono) to Figma.
 - Uses [Figma plugin API](https://developers.figma.com/docs/plugins/api/api-reference/), so you can do everything it allows
 - Uses [Figma MCP](https://help.figma.com/hc/en-us/articles/32132100833559-Guide-to-the-Figma-MCP-server) for screenshots and design context if available
 
+```
+↓ pi
+↓ Bridge server (HTTP)
+↓ WebSocket
+↓ Figma plugin
+↓ Plugin API
+. Figma canvas
+```
+
 ## Install
 
 ```
@@ -17,18 +26,16 @@ pi install https://github.com/mkaralevich/pi-figma-labor
 ## Use
 
 - Bridge auto-starts when pi launches
-- In Figma, switch to Design Mode and open Pi Labor plugin ([Shopify](https://www.figma.com/community/plugin/1611556075783258900/figma-labor) | Public TBD)
+- Open *Pi Labor* plugin in Design Mode ([Shopify](https://www.figma.com/community/plugin/1611556075783258900/figma-labor) | Public TBD)
 - Ask your `pi` to do things
 
-### Figma MCP
-
-Desktop Figma MCP support is bundled in this repo. To enable:
+Extension includes **Desktop Figma MCP**. To enable:
 
 1. Open design file
 2. Switch to Dev Mode
 3. Inspect panel → MCP server → Enable desktop MCP server
 
-Optional port override:
+Port defaults to the one in the [official docs](https://developers.figma.com/docs/figma-mcp-server/local-server-installation/). To override:
 
 ```sh
 FIGMA_MCP_PORT=3845 pi
@@ -44,22 +51,9 @@ FIGMA_MCP_PORT=3845 pi
 | `/figma-labor`       | Show bridge status and Figma plugin connection status |
 | `/figma-mcp`         | Show Figma MCP server status and list available tools |
 
-
-## How it works
-
-```
-↓ pi extension
-↓ bridge server (HTTP)
-↓ WebSocket
-↓ Figma plugin
-↓ Plugin API
-. Figma canvas
-```
-
 ## MCP ↔ Labor
 
-If MCP is unvavailable, Labor will use Figma API equivalent.
-
+MCP tools are preferred for reading. If MCP is unavailable, Labor will use Figma API equivalent.
 
 | MCP tool             | labor equivalent                                                  |
 | -------------------- | ----------------------------------------------------------------- |
@@ -70,9 +64,6 @@ If MCP is unvavailable, Labor will use Figma API equivalent.
 
 
 ## Available tools
-
-Figma MCP tools are registered when the desktop MCP server is enabled.
-
 
 | Tool                              | Description                                                    |
 | --------------------------------- | -------------------------------------------------------------- |
@@ -101,6 +92,7 @@ Figma MCP tools are registered when the desktop MCP server is enabled.
 | `labor_run_script`                | Run arbitrary JavaScript in the Figma plugin context           |
 | `labor_undo`                      | Undo the last operation                                        |
 
+Tools are registered when the desktop MCP server is enabled. `/figma-mcp` to see available tools.
 
 ## Available skills
 
