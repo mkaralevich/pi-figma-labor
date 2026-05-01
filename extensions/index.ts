@@ -440,12 +440,17 @@ async function callMcpToolWithRetry(
 		return await callMcpTool(name, args, signal);
 	} catch (error: unknown) {
 		const message = error instanceof Error ? error.message : String(error);
-		if (!message.toLowerCase().includes("aborted")) throw error;
+		const lower = message.toLowerCase();
+		const shouldRetry =
+			lower.includes("aborted") ||
+			message.includes("404") ||
+			lower.includes("session");
+		if (!shouldRetry) throw error;
 
 		mcpSessionId = undefined;
-		const ok = await initializeMcpSession();
+		const ok = await initializeMcpSession(signal);
 		if (!ok) throw error;
-		return await callMcpTool(name, args);
+		return await callMcpTool(name, args, signal);
 	}
 }
 
