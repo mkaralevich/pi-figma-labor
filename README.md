@@ -50,8 +50,6 @@ FIGMA_MCP_PORT=3845 pi
 | `/figma-labor`       | Show bridge status and Figma plugin connection status |
 | `/figma-mcp`         | Show Figma MCP server status and list available tools |
 
-When the local bridge is running, the footer shows `labor P M`: `P` is the Figma plugin connection and `M` is the desktop MCP connection. A missing connection is shown as `◌`. Plugin state is refreshed through the bridge. MCP state is checked every five seconds while disconnected and every thirty seconds while connected; transport or session failures clear it immediately and return to fast polling. Opening or closing Figma therefore updates the footer without `/reload`. The entire Labor status is hidden when the bridge is stopped or failed to start.
-
 ```text
 <nothing>     bridge (your local server) is not running
 labor ◌ ◌     bridge running, but plugin and MCP are not working
