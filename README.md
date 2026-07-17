@@ -50,6 +50,8 @@ FIGMA_MCP_PORT=3845 pi
 | `/figma-labor`       | Show bridge status and Figma plugin connection status |
 | `/figma-mcp`         | Show Figma MCP server status and list available tools |
 
+### Footer status
+
 ```text
 <nothing>     bridge (your local server) is not running
 labor ◌ ◌     bridge running, but plugin and MCP are not working
