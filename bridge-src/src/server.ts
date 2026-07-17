@@ -30,8 +30,18 @@ interface Command {
   params: Record<string, unknown>;
 }
 
-interface PluginResponse {
-  id: string;
+interface PluginContext {
+  editorType: "figma" | "figjam" | "slides" | "dev" | "buzz";
+  page: { id: string; name: string };
+  selectionCount: number;
+  focusedSlide?: { id: string; name: string } | null;
+  slidesMode?: "grid" | "single-slide";
+}
+
+interface PluginMessage {
+  id?: string;
+  type?: "ping" | "hello";
+  context?: PluginContext;
   result?: unknown;
   error?: string;
 }
@@ -45,6 +55,7 @@ interface PendingCommand {
 // ## State
 
 let pluginSocket: WebSocket | null = null;
+let pluginContext: PluginContext | null = null;
 const pending = new Map<string, PendingCommand>();
 
 // ## Plugin communication
@@ -52,14 +63,22 @@ const pending = new Map<string, PendingCommand>();
 function sendToPlugin(command: Command, timeoutMs?: number): Promise<unknown> {
   return new Promise((resolve, reject) => {
     if (!pluginSocket || pluginSocket.readyState !== WebSocket.OPEN) {
-      reject(new Error("Figma plugin is not connected. Make sure the plugin is open in Figma."));
+      reject(
+        new Error(
+          "Figma plugin is not connected. Make sure the plugin is open in Figma.",
+        ),
+      );
       return;
     }
 
     const effectiveTimeout = timeoutMs ?? COMMAND_TIMEOUT_MS;
     const timer = setTimeout(() => {
       pending.delete(command.id);
-      reject(new Error(`Command "${command.command}" timed out after ${effectiveTimeout}ms`));
+      reject(
+        new Error(
+          `Command "${command.command}" timed out after ${effectiveTimeout}ms`,
+        ),
+      );
     }, effectiveTimeout);
 
     pending.set(command.id, { resolve, reject, timer });
@@ -109,7 +128,11 @@ const httpServer = http.createServer(async (req, res) => {
   if (req.method === "GET" && req.url === "/status") {
     sendJson(res, 200, {
       bridge: "running",
-      plugin: pluginSocket?.readyState === WebSocket.OPEN ? "connected" : "disconnected",
+      plugin:
+        pluginSocket?.readyState === WebSocket.OPEN
+          ? "connected"
+          : "disconnected",
+      context: pluginContext,
       pending: pending.size,
     });
     return;
@@ -124,7 +147,15 @@ const httpServer = http.createServer(async (req, res) => {
       return;
     }
 
-    const { command, params = {}, timeout } = body as { command?: string; params?: Record<string, unknown>; timeout?: number };
+    const {
+      command,
+      params = {},
+      timeout,
+    } = body as {
+      command?: string;
+      params?: Record<string, unknown>;
+      timeout?: number;
+    };
     if (!command) {
       sendJson(res, 400, { error: "Missing required field: command" });
       return;
@@ -168,22 +199,35 @@ wss.on("connection", (ws) => {
   }
 
   pluginSocket = ws;
+  pluginContext = null;
   console.log("[bridge] Figma plugin connected");
 
   ws.on("message", (data) => {
-    let msg: PluginResponse & { type?: string };
+    let msg: PluginMessage;
     try {
-      msg = JSON.parse(data.toString()) as PluginResponse & { type?: string };
+      msg = JSON.parse(data.toString()) as PluginMessage;
     } catch {
       console.error("[bridge] Invalid message from plugin:", data.toString());
       return;
     }
 
     if (msg.type === "ping") return;
+    if (msg.type === "hello" && msg.context) {
+      pluginContext = msg.context;
+      console.log(`[bridge] Plugin context: ${msg.context.editorType}`);
+      return;
+    }
+    if (!msg.id) {
+      console.warn("[bridge] Received message without an id");
+      return;
+    }
 
     const p = pending.get(msg.id);
     if (!p) {
-      console.warn("[bridge] Received response for unknown command id:", msg.id);
+      console.warn(
+        "[bridge] Received response for unknown command id:",
+        msg.id,
+      );
       return;
     }
 
@@ -199,7 +243,10 @@ wss.on("connection", (ws) => {
 
   ws.on("close", () => {
     console.log("[bridge] Figma plugin disconnected");
-    if (pluginSocket === ws) pluginSocket = null;
+    if (pluginSocket === ws) {
+      pluginSocket = null;
+      pluginContext = null;
+    }
 
     for (const [id, p] of pending) {
       clearTimeout(p.timer);

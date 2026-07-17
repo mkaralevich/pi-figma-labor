@@ -6,8 +6,11 @@
 
 ## Tool roles
 
-- Use labor tools for canvas reads and writes
-- Use MCP tools for screenshots and design inspection when available
+- Use labor tools for canvas reads and writes in Figma Design, FigJam, and Figma Slides
+- The plugin status includes the active editor when available; do not assume Design-only APIs exist in FigJam or Slides
+- Use MCP tools for screenshots and design inspection only when the active editor supports them
+- Use `get_figjam` for FigJam inspection when available
+- Desktop MCP may reject Slides screenshots; verify Slides changes with labor zoom plus node re-reads instead
 - If MCP tools are unavailable, do not call them
 
 | MCP tool               | labor equivalent                                                  |
@@ -73,10 +76,15 @@ frame.itemSpacing = 8;
 frame.counterAxisSpacing = 8;
 ```
 
-## Mode behavior
+## Product behavior
 
+- Figma Design supports components, variants, styles, variables, and libraries
+- FigJam supports native nodes such as stickies, shapes with text, connectors, code blocks, tables, and sections
+- Figma Slides uses `SLIDE`, `SLIDE_ROW`, and `SLIDE_GRID`; create ordinary content inside the focused slide
+- Slides does not support components, styles, variables, or libraries
+- Interactive slide elements can be read and repositioned but not created or edited through the Plugin API
 - In Dev Mode, reads work and writes do not
-- If writes fail silently, ask the user to switch to Design Mode
+- If Design writes fail silently, ask the user to switch to Design Mode
 
 ## Error recovery
 
@@ -120,13 +128,17 @@ frame.counterAxisSpacing = 8;
 
 ```js
 const paint = {
-	type: "SOLID",
-	visible: true,
-	opacity: 0.04,
-	blendMode: "NORMAL",
-	color: { r: 0.135, g: 0.195, b: 0.254 },
+  type: "SOLID",
+  visible: true,
+  opacity: 0.04,
+  blendMode: "NORMAL",
+  color: { r: 0.135, g: 0.195, b: 0.254 },
 };
-const bound = figma.variables.setBoundVariableForPaint(paint, "color", variable);
+const bound = figma.variables.setBoundVariableForPaint(
+  paint,
+  "color",
+  variable,
+);
 node.fills = [bound];
 ```
 

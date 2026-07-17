@@ -49,10 +49,10 @@ Work with variables, tokens, components, variants, and styles using labor tools.
 ```js
 const collections = await figma.variables.getLocalVariableCollectionsAsync();
 return collections.map((collection) => ({
-	name: collection.name,
-	id: collection.id,
-	varCount: collection.variableIds.length,
-	modes: collection.modes.map((mode) => mode.name),
+  name: collection.name,
+  id: collection.id,
+  varCount: collection.variableIds.length,
+  modes: collection.modes.map((mode) => mode.name),
 }));
 ```
 
@@ -60,13 +60,15 @@ return collections.map((collection) => ({
 
 ```js
 const vars = await figma.variables.getLocalVariablesAsync();
-const filtered = vars.filter((variable) => variable.variableCollectionId === "COLLECTION_ID");
+const filtered = vars.filter(
+  (variable) => variable.variableCollectionId === "COLLECTION_ID",
+);
 return filtered.map((variable) => ({
-	name: variable.name,
-	id: variable.id,
-	resolvedType: variable.resolvedType,
-	scopes: variable.scopes,
-	valuesByMode: variable.valuesByMode,
+  name: variable.name,
+  id: variable.id,
+  resolvedType: variable.resolvedType,
+  scopes: variable.scopes,
+  valuesByMode: variable.valuesByMode,
 }));
 ```
 
@@ -89,15 +91,48 @@ return filtered.map((variable) => ({
   - `figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync()`
   - `figma.teamLibrary.getVariablesInLibraryCollectionAsync(collectionKey)`
 - Libraries must already be enabled in the file UI
+- Plugin manifest must include `"permissions": ["teamlibrary"]`
 - This is the native alternative to `mcp: search_design_system` for variable discovery
+- After discovery, import the exact variable you need with `figma.variables.importVariableByKeyAsync(variableKey)`
 
 ```js
-const collections = await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
+const collections =
+  await figma.teamLibrary.getAvailableLibraryVariableCollectionsAsync();
 return collections.map((collection) => ({
-	name: collection.name,
-	key: collection.key,
-	libraryName: collection.libraryName,
+  name: collection.name,
+  key: collection.key,
+  libraryName: collection.libraryName,
 }));
+```
+
+### Team library components
+
+- There is no comparable native Plugin API to enumerate all remote library components the way variables can be listed
+- Native component support is import-by-key only:
+  - `figma.importComponentByKeyAsync(componentKey)`
+  - `figma.importComponentSetByKeyAsync(componentSetKey)`
+- Treat component discovery and component import as separate steps
+- If the key is unknown, do not assume the component is unavailable
+- Preferred discovery order:
+  1. inspect existing instances already used in the file
+  2. inspect remote main components from selected or nearby instances
+  3. use known keys from plugin data, client storage, or a maintained mapping
+  4. if needed, use Figma REST API outside the plugin to fetch component keys from the library file, then import by key in the plugin
+- When the user asks to use a library component and you cannot enumerate it directly, say that variables are discoverable natively but remote components need a known key or an external lookup step
+
+```js
+const component = await figma.importComponentByKeyAsync("COMPONENT_KEY");
+const instance = component.createInstance();
+return { componentId: component.id, instanceId: instance.id };
+```
+
+```js
+const componentSet =
+  await figma.importComponentSetByKeyAsync("COMPONENT_SET_KEY");
+return {
+  componentSetId: componentSet.id,
+  defaultVariantId: componentSet.defaultVariant?.id ?? null,
+};
 ```
 
 ### Create a collection
@@ -111,7 +146,8 @@ return { collectionId: collection.id, modeId: collection.modes[0].modeId };
 ### Add modes
 
 ```js
-const collection = await figma.variables.getVariableCollectionByIdAsync("COLLECTION_ID");
+const collection =
+  await figma.variables.getVariableCollectionByIdAsync("COLLECTION_ID");
 const darkModeId = collection.addMode("Dark");
 collection.renameMode(collection.modes[0].modeId, "Light");
 return { lightModeId: collection.modes[0].modeId, darkModeId };
@@ -120,13 +156,22 @@ return { lightModeId: collection.modes[0].modeId, darkModeId };
 ### Create variables
 
 ```js
-const collection = await figma.variables.getVariableCollectionByIdAsync("COLLECTION_ID");
+const collection =
+  await figma.variables.getVariableCollectionByIdAsync("COLLECTION_ID");
 const modeId = collection.modes[0].modeId;
 
-const bgPrimary = figma.variables.createVariable("color/bg/primary", collection, "COLOR");
+const bgPrimary = figma.variables.createVariable(
+  "color/bg/primary",
+  collection,
+  "COLOR",
+);
 bgPrimary.setValueForMode(modeId, { r: 1, g: 1, b: 1, a: 1 });
 
-const spacingSm = figma.variables.createVariable("spacing/sm", collection, "FLOAT");
+const spacingSm = figma.variables.createVariable(
+  "spacing/sm",
+  collection,
+  "FLOAT",
+);
 spacingSm.setValueForMode(modeId, 8);
 
 return { bgPrimaryId: bgPrimary.id, spacingSmId: spacingSm.id };
@@ -137,17 +182,17 @@ return { bgPrimaryId: bgPrimary.id, spacingSmId: spacingSm.id };
 - Do not leave variables on `ALL_SCOPES`
 - Use the narrowest practical scope
 
-| Token type | Scopes |
-|---|---|
-| Background colors | `FRAME_FILL`, `SHAPE_FILL` |
-| Text colors | `TEXT_FILL` |
-| Border colors | `STROKE_COLOR` |
-| Spacing | `GAP` |
-| Corner radius | `CORNER_RADIUS` |
-| Width or height | `WIDTH_HEIGHT` |
-| Opacity | `OPACITY` |
+| Token type          | Scopes                     |
+| ------------------- | -------------------------- |
+| Background colors   | `FRAME_FILL`, `SHAPE_FILL` |
+| Text colors         | `TEXT_FILL`                |
+| Border colors       | `STROKE_COLOR`             |
+| Spacing             | `GAP`                      |
+| Corner radius       | `CORNER_RADIUS`            |
+| Width or height     | `WIDTH_HEIGHT`             |
+| Opacity             | `OPACITY`                  |
 | Font size or weight | `FONT_SIZE`, `FONT_WEIGHT` |
-| Raw primitives | `[]` |
+| Raw primitives      | `[]`                       |
 
 ```js
 const variable = await figma.variables.getVariableByIdAsync("VAR_ID");
@@ -174,16 +219,31 @@ return "code syntax set";
 - Alias semantics to primitives
 
 ```js
-const semanticCollection = await figma.variables.getVariableCollectionByIdAsync("SEMANTIC_COLLECTION_ID");
+const semanticCollection = await figma.variables.getVariableCollectionByIdAsync(
+  "SEMANTIC_COLLECTION_ID",
+);
 const lightModeId = semanticCollection.modes[0].modeId;
 const darkModeId = semanticCollection.modes[1].modeId;
 
-const primitiveWhite = await figma.variables.getVariableByIdAsync("PRIMITIVE_WHITE_ID");
-const primitiveGray900 = await figma.variables.getVariableByIdAsync("PRIMITIVE_GRAY900_ID");
+const primitiveWhite =
+  await figma.variables.getVariableByIdAsync("PRIMITIVE_WHITE_ID");
+const primitiveGray900 = await figma.variables.getVariableByIdAsync(
+  "PRIMITIVE_GRAY900_ID",
+);
 
-const bgPrimary = figma.variables.createVariable("color/bg/primary", semanticCollection, "COLOR");
-bgPrimary.setValueForMode(lightModeId, { type: "VARIABLE_ALIAS", id: primitiveWhite.id });
-bgPrimary.setValueForMode(darkModeId, { type: "VARIABLE_ALIAS", id: primitiveGray900.id });
+const bgPrimary = figma.variables.createVariable(
+  "color/bg/primary",
+  semanticCollection,
+  "COLOR",
+);
+bgPrimary.setValueForMode(lightModeId, {
+  type: "VARIABLE_ALIAS",
+  id: primitiveWhite.id,
+});
+bgPrimary.setValueForMode(darkModeId, {
+  type: "VARIABLE_ALIAS",
+  id: primitiveGray900.id,
+});
 
 return { id: bgPrimary.id };
 ```
@@ -203,7 +263,11 @@ node.setBoundVariable("topLeftRadius", spacingVar);
 
 const colorVar = await figma.variables.getVariableByIdAsync("COLOR_VAR_ID");
 const basePaint = { type: "SOLID", color: { r: 0, g: 0, b: 0 } };
-const boundPaint = figma.variables.setBoundVariableForPaint(basePaint, "color", colorVar);
+const boundPaint = figma.variables.setBoundVariableForPaint(
+  basePaint,
+  "color",
+  colorVar,
+);
 node.fills = [boundPaint];
 
 return "bindings set";
@@ -220,9 +284,9 @@ return "bindings set";
 ```js
 const node = await figma.getNodeByIdAsync("NODE_ID");
 return {
-	boundVariables: node.boundVariables,
-	fills: node.fills,
-	strokes: node.strokes,
+  boundVariables: node.boundVariables,
+  fills: node.fills,
+  strokes: node.strokes,
 };
 ```
 
@@ -243,7 +307,11 @@ return {
 ```js
 const collection = figma.variables.createVariableCollection("type");
 const modeId = collection.modes[0].modeId;
-const fontFamilyVar = figma.variables.createVariable("font/family/base", collection, "STRING");
+const fontFamilyVar = figma.variables.createVariable(
+  "font/family/base",
+  collection,
+  "STRING",
+);
 fontFamilyVar.setValueForMode(modeId, "Roboto");
 
 await figma.loadFontAsync({ family: "Inter", style: "Regular" });
@@ -267,11 +335,19 @@ const radiusVar = await figma.variables.getVariableByIdAsync("RADIUS_VAR_ID");
 const countVar = await figma.variables.getVariableByIdAsync("COUNT_VAR_ID");
 
 const effects = JSON.parse(JSON.stringify(node.effects));
-effects[0] = figma.variables.setBoundVariableForEffect(effects[0], "radius", radiusVar);
+effects[0] = figma.variables.setBoundVariableForEffect(
+  effects[0],
+  "radius",
+  radiusVar,
+);
 node.effects = effects;
 
 const grids = JSON.parse(JSON.stringify(node.layoutGrids));
-grids[0] = figma.variables.setBoundVariableForLayoutGrid(grids[0], "count", countVar);
+grids[0] = figma.variables.setBoundVariableForLayoutGrid(
+  grids[0],
+  "count",
+  countVar,
+);
 node.layoutGrids = grids;
 
 return "effect and grid bindings set";
@@ -313,7 +389,11 @@ return { id: imported.id, name: imported.name };
 const base = figma.variables.createVariableCollection("semantic");
 const extended = base.extend("semantic/dark");
 const modeId = extended.modes[0].modeId;
-const variable = figma.variables.createVariable("color/text/primary", base, "COLOR");
+const variable = figma.variables.createVariable(
+  "color/text/primary",
+  base,
+  "COLOR",
+);
 variable.setValueForMode(base.modes[0].modeId, { r: 0, g: 0, b: 0, a: 1 });
 variable.setValueForMode(modeId, { r: 1, g: 1, b: 1, a: 1 });
 return { baseId: base.id, extendedId: extended.id };
@@ -336,10 +416,10 @@ return { baseId: base.id, extendedId: extended.id };
 ```js
 const results = [];
 figma.currentPage.findAll((node) => {
-	if (node.type === "COMPONENT" || node.type === "COMPONENT_SET") {
-		results.push({ name: node.name, type: node.type, id: node.id });
-	}
-	return false;
+  if (node.type === "COMPONENT" || node.type === "COMPONENT_SET") {
+    results.push({ name: node.name, type: node.type, id: node.id });
+  }
+  return false;
 });
 return results;
 ```
@@ -383,37 +463,48 @@ await figma.loadFontAsync({ family: "Inter Variable", style: "Medium" });
 
 const variants = [];
 const configs = [
-	{ variant: "Primary", fill: { r: 0.24, g: 0.36, b: 0.96 }, textFill: { r: 1, g: 1, b: 1 } },
-	{ variant: "Secondary", fill: { r: 0.95, g: 0.95, b: 0.97 }, textFill: { r: 0, g: 0, b: 0 } },
+  {
+    variant: "Primary",
+    fill: { r: 0.24, g: 0.36, b: 0.96 },
+    textFill: { r: 1, g: 1, b: 1 },
+  },
+  {
+    variant: "Secondary",
+    fill: { r: 0.95, g: 0.95, b: 0.97 },
+    textFill: { r: 0, g: 0, b: 0 },
+  },
 ];
 
 for (const cfg of configs) {
-	const comp = figma.createComponent();
-	comp.name = `Variant=${cfg.variant}`;
-	comp.layoutMode = "HORIZONTAL";
-	comp.primaryAxisSizingMode = "AUTO";
-	comp.counterAxisSizingMode = "AUTO";
-	comp.counterAxisAlignItems = "CENTER";
-	comp.paddingTop = 10;
-	comp.paddingBottom = 10;
-	comp.paddingLeft = 16;
-	comp.paddingRight = 16;
-	comp.cornerRadius = 8;
-	comp.fills = [{ type: "SOLID", color: cfg.fill }];
+  const comp = figma.createComponent();
+  comp.name = `Variant=${cfg.variant}`;
+  comp.layoutMode = "HORIZONTAL";
+  comp.primaryAxisSizingMode = "AUTO";
+  comp.counterAxisSizingMode = "AUTO";
+  comp.counterAxisAlignItems = "CENTER";
+  comp.paddingTop = 10;
+  comp.paddingBottom = 10;
+  comp.paddingLeft = 16;
+  comp.paddingRight = 16;
+  comp.cornerRadius = 8;
+  comp.fills = [{ type: "SOLID", color: cfg.fill }];
 
-	const label = figma.createText();
-	label.fontName = { family: "Inter Variable", style: "Medium" };
-	label.characters = "Button";
-	label.fontSize = 14;
-	label.fills = [{ type: "SOLID", color: cfg.textFill }];
-	comp.appendChild(label);
+  const label = figma.createText();
+  label.fontName = { family: "Inter Variable", style: "Medium" };
+  label.characters = "Button";
+  label.fontSize = 14;
+  label.fills = [{ type: "SOLID", color: cfg.textFill }];
+  comp.appendChild(label);
 
-	variants.push(comp);
+  variants.push(comp);
 }
 
 const compSet = figma.combineAsVariants(variants, figma.currentPage);
 compSet.name = "Button";
-return { compSetId: compSet.id, variantIds: variants.map((variant) => variant.id) };
+return {
+  compSetId: compSet.id,
+  variantIds: variants.map((variant) => variant.id),
+};
 ```
 
 ### Layout variants after combine
@@ -425,9 +516,9 @@ return { compSetId: compSet.id, variantIds: variants.map((variant) => variant.id
 const compSet = await figma.getNodeByIdAsync("COMP_SET_ID");
 let x = 0;
 for (const child of compSet.children) {
-	child.x = x;
-	child.y = 0;
-	x += child.width + 20;
+  child.x = x;
+  child.y = 0;
+  x += child.width + 20;
 }
 compSet.resize(x - 20, compSet.children[0].height);
 return "variants laid out";
@@ -454,28 +545,44 @@ return "variants laid out";
 const original = await figma.getNodeByIdAsync("ICON_COMPONENT_ID");
 
 const setStrokes = (node, stroke) => {
-	if ("children" in node) node.children.forEach((child) => setStrokes(child, stroke));
-	if (node.type === "VECTOR") node.strokeWeight = stroke;
+  if ("children" in node)
+    node.children.forEach((child) => setStrokes(child, stroke));
+  if (node.type === "VECTOR") node.strokeWeight = stroke;
 };
 
 const configs = [
-	{ name: "size=medium", size: 24, scale: 1, stroke: 1.5, node: original },
-	{ name: "size=small", size: 16, scale: 16 / 24, stroke: 1.2, node: original.clone() },
-	{ name: "size=large", size: 36, scale: 36 / 24, stroke: 1.8, node: original.clone() },
+  { name: "size=medium", size: 24, scale: 1, stroke: 1.5, node: original },
+  {
+    name: "size=small",
+    size: 16,
+    scale: 16 / 24,
+    stroke: 1.2,
+    node: original.clone(),
+  },
+  {
+    name: "size=large",
+    size: 36,
+    scale: 36 / 24,
+    stroke: 1.8,
+    node: original.clone(),
+  },
 ];
 
 for (const current of configs) {
-	const comp = current.node;
-	const icon = comp.children[0];
-	comp.name = current.name;
-	comp.resizeWithoutConstraints(current.size, current.size);
-	if (current.scale !== 1) icon.rescale(current.scale);
-	icon.x = (current.size - icon.width) / 2;
-	icon.y = (current.size - icon.height) / 2;
-	setStrokes(comp, current.stroke);
+  const comp = current.node;
+  const icon = comp.children[0];
+  comp.name = current.name;
+  comp.resizeWithoutConstraints(current.size, current.size);
+  if (current.scale !== 1) icon.rescale(current.scale);
+  icon.x = (current.size - icon.width) / 2;
+  icon.y = (current.size - icon.height) / 2;
+  setStrokes(comp, current.stroke);
 }
 
-const set = figma.combineAsVariants(configs.map((config) => config.node), original.parent);
+const set = figma.combineAsVariants(
+  configs.map((config) => config.node),
+  original.parent,
+);
 set.name = "icons/MyIcon";
 return { setId: set.id };
 ```
@@ -493,7 +600,7 @@ const comp = await figma.getNodeByIdAsync("COMPONENT_ID");
 comp.addComponentProperty("label", "TEXT", "Button");
 comp.addComponentProperty("showIcon", "BOOLEAN", true);
 comp.addComponentProperty("icon", "INSTANCE_SWAP", "DEFAULT_COMPONENT_ID", {
-	preferredValues: [{ type: "COMPONENT", key: "ICON_COMPONENT_KEY" }],
+  preferredValues: [{ type: "COMPONENT", key: "ICON_COMPONENT_KEY" }],
 });
 return "properties added";
 ```
@@ -502,8 +609,12 @@ return "properties added";
 
 ```js
 const comp = await figma.getNodeByIdAsync("COMPONENT_ID");
-const label = comp.findOne((node) => node.type === "TEXT" && node.name === "Label");
-const icon = comp.findOne((node) => node.type === "INSTANCE" && node.name === "Icon");
+const label = comp.findOne(
+  (node) => node.type === "TEXT" && node.name === "Label",
+);
+const icon = comp.findOne(
+  (node) => node.type === "INSTANCE" && node.name === "Icon",
+);
 
 label.componentPropertyReferences = { characters: "label" };
 icon.componentPropertyReferences = { visible: "showIcon" };
@@ -611,15 +722,17 @@ return "paint style applied";
 ```js
 const style = figma.createEffectStyle();
 style.name = "Shadow/Medium";
-style.effects = [{
-	type: "DROP_SHADOW",
-	visible: true,
-	radius: 16,
-	color: { r: 0, g: 0, b: 0, a: 0.1 },
-	offset: { x: 0, y: 4 },
-	spread: 0,
-	showShadowBehindNode: false,
-}];
+style.effects = [
+  {
+    type: "DROP_SHADOW",
+    visible: true,
+    radius: 16,
+    color: { r: 0, g: 0, b: 0, a: 0.1 },
+    offset: { x: 0, y: 4 },
+    spread: 0,
+    showShadowBehindNode: false,
+  },
+];
 return { styleId: style.id };
 ```
 
@@ -680,13 +793,13 @@ Size=Medium, Style=Primary, State=Default
 
 ## Validation checklist
 
-| Phase | Action | Validate with |
-|---|---|---|
-| Discovery | list collections, variables, components | `labor_run_script` read-only |
-| Tokens | create collections, primitives, semantics, scopes, syntax | `labor_run_script` read-back |
-| Components | create base, variants, properties, links, layout | `mcp: get_screenshot` \| `labor: labor_zoom_to_node` + manual inspect |
-| Styles | create text and effect styles | `labor_run_script` read-back |
-| Bindings | bind colors, spacing, radii | `mcp: get_screenshot` \| `labor: labor_get_node_full` + `labor_run_script` |
+| Phase      | Action                                                    | Validate with                                                              |
+| ---------- | --------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Discovery  | list collections, variables, components                   | `labor_run_script` read-only                                               |
+| Tokens     | create collections, primitives, semantics, scopes, syntax | `labor_run_script` read-back                                               |
+| Components | create base, variants, properties, links, layout          | `mcp: get_screenshot` \| `labor: labor_zoom_to_node` + manual inspect      |
+| Styles     | create text and effect styles                             | `labor_run_script` read-back                                               |
+| Bindings   | bind colors, spacing, radii                               | `mcp: get_screenshot` \| `labor: labor_get_node_full` + `labor_run_script` |
 
 ## Final checks
 

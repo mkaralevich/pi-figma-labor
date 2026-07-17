@@ -26,7 +26,7 @@ pi install https://github.com/mkaralevich/pi-figma-labor
 ## Use
 
 - Bridge auto-starts when pi launches
-- Open *Pi Labor* plugin in Design Mode ([Shopify](https://www.figma.com/community/plugin/1611556075783258900/figma-labor) | Public TBD)
+- Open _Pi Labor_ in Figma Design, FigJam, or Figma Slides ([Shopify](https://www.figma.com/community/plugin/1611556075783258900/figma-labor) | Public TBD)
 - Ask your `pi` to do things
 
 Extension includes **Desktop Figma MCP**. To enable:
@@ -43,13 +43,14 @@ FIGMA_MCP_PORT=3845 pi
 
 ### Commands
 
-
 | Command              | Description                                           |
 | -------------------- | ----------------------------------------------------- |
 | `/figma-labor-start` | Start bridge server manually                          |
 | `/figma-labor-stop`  | Stop bridge server manually                           |
 | `/figma-labor`       | Show bridge status and Figma plugin connection status |
 | `/figma-mcp`         | Show Figma MCP server status and list available tools |
+
+When the local bridge is running, the footer shows `labor P M`: `P` is the Figma plugin connection and `M` is the desktop MCP connection. A missing connection is shown as `◌`. Plugin state is refreshed through the bridge. MCP state is checked every five seconds while disconnected and every thirty seconds while connected; transport or session failures clear it immediately and return to fast polling. Opening or closing Figma therefore updates the footer without `/reload`. The entire Labor status is hidden when the bridge is stopped or failed to start.
 
 ## MCP ↔ Labor
 
@@ -61,7 +62,6 @@ MCP tools are preferred for reading. If MCP is unavailable, Labor will use Figma
 | `get_design_context` | `labor_get_node_full` + `labor_get_children` + `labor_run_script` |
 | `get_metadata`       | `labor_get_children` + `labor_run_script`                         |
 | `get_variable_defs`  | `labor_run_script`                                                |
-
 
 ## Available tools
 
@@ -80,9 +80,9 @@ MCP tools are preferred for reading. If MCP is unavailable, Labor will use Figma
 | `labor_scale_node`                | Scale a node proportionally like Figma Scale tool              |
 | `labor_clone_node`                | Clone a node                                                   |
 | `labor_update_fills`              | Change fill colors (r/g/b/a, 0–1 range)                        |
-| `labor_update_text`               | Change text content and font size                              |
+| `labor_update_text`               | Change text on standard or native text-bearing nodes           |
 | `labor_set_layout`                | Set auto-layout direction, alignment, sizing, padding, spacing |
-| `labor_create_node`               | Create RECTANGLE, ELLIPSE, FRAME, or TEXT                      |
+| `labor_create_node`               | Create standard, FigJam-native, or Slides-native nodes         |
 | `labor_create_instance`           | Create an instance of a component                              |
 | `labor_delete_node`               | Delete a node                                                  |
 | `labor_move_node`                 | Move a node to a different parent                              |
@@ -94,8 +94,19 @@ MCP tools are preferred for reading. If MCP is unavailable, Labor will use Figma
 
 Tools are registered when the desktop MCP server is enabled. `/figma-mcp` to see available tools.
 
-## Available skills
+### Product support
 
+| Capability                                 | Design       | FigJam                                         | Slides                                         |
+| ------------------------------------------ | ------------ | ---------------------------------------------- | ---------------------------------------------- |
+| Local selection, reads, writes, zoom, undo | ✓            | ✓                                              | ✓                                              |
+| Native product nodes                       | Design nodes | Stickies, shapes, connectors, tables, sections | Slides, rows, slide content                    |
+| Components, variants, styles, variables    | ✓            | —                                              | —                                              |
+| MCP `get_figjam`                           | —            | ✓                                              | —                                              |
+| Desktop MCP screenshots                    | ✓            | ✓                                              | Runtime-dependent; local verification fallback |
+
+Live tests confirmed native sticky, shape, connector, table, and section operations in FigJam, plus focused-slide reads and local writes in Slides. FigJam embedded text fonts must be loaded before changing text. New connectors initially expose an empty font and require a valid fallback before labels can be assigned; code blocks require Source Code Pro Medium before code updates. Compound table-cell IDs work with local reads and text updates. Each successful mutation commits a separate undo checkpoint so `labor_undo` only reverts the latest operation. Slides desktop MCP screenshots were rejected in the tested runtime, so Slides changes are verified through local node reads and viewport zoom.
+
+## Available skills
 
 | Skill                 | Description                                                     |
 | --------------------- | --------------------------------------------------------------- |
@@ -104,8 +115,11 @@ Tools are registered when the desktop MCP server is enabled. `/figma-mcp` to see
 | `figma-select`        | Find, inspect, extract, and batch-select Figma nodes            |
 | `figma-prototype`     | (WIP) Prototype flows, reactions, transitions, and start points |
 
-
 ## Development
+
+The Figma plugin is maintained separately in [mkaralevich/figma-labor](https://github.com/mkaralevich/figma-labor) (`../figma-pi-labor` in the local workspace). Its manifests, Plugin API code, UI, typings, and release instructions live there. The pi extension and WebSocket bridge live in this repository.
+
+The plugin manifests target Figma Design, FigJam, and Figma Slides. Figma does not allow one plugin manifest to target both FigJam and Dev Mode, so local canvas operations prioritize the three design products; desktop MCP remains the Dev Mode integration.
 
 If you modify `bridge-src/src/server.ts`:
 

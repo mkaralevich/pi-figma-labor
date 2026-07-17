@@ -3656,17 +3656,26 @@ var import_node_crypto = require("node:crypto");
 var PORT = 3846;
 var COMMAND_TIMEOUT_MS = 3e4;
 var pluginSocket = null;
+var pluginContext = null;
 var pending = /* @__PURE__ */ new Map();
 function sendToPlugin(command, timeoutMs) {
   return new Promise((resolve, reject) => {
     if (!pluginSocket || pluginSocket.readyState !== import_websocket.default.OPEN) {
-      reject(new Error("Figma plugin is not connected. Make sure the plugin is open in Figma."));
+      reject(
+        new Error(
+          "Figma plugin is not connected. Make sure the plugin is open in Figma."
+        )
+      );
       return;
     }
     const effectiveTimeout = timeoutMs ?? COMMAND_TIMEOUT_MS;
     const timer = setTimeout(() => {
       pending.delete(command.id);
-      reject(new Error(`Command "${command.command}" timed out after ${effectiveTimeout}ms`));
+      reject(
+        new Error(
+          `Command "${command.command}" timed out after ${effectiveTimeout}ms`
+        )
+      );
     }, effectiveTimeout);
     pending.set(command.id, { resolve, reject, timer });
     pluginSocket.send(JSON.stringify(command));
@@ -3707,6 +3716,7 @@ var httpServer = import_node_http.default.createServer(async (req, res) => {
     sendJson(res, 200, {
       bridge: "running",
       plugin: pluginSocket?.readyState === import_websocket.default.OPEN ? "connected" : "disconnected",
+      context: pluginContext,
       pending: pending.size
     });
     return;
@@ -3719,7 +3729,11 @@ var httpServer = import_node_http.default.createServer(async (req, res) => {
       sendJson(res, 400, { error: "Invalid JSON body" });
       return;
     }
-    const { command, params = {}, timeout } = body;
+    const {
+      command,
+      params = {},
+      timeout
+    } = body;
     if (!command) {
       sendJson(res, 400, { error: "Missing required field: command" });
       return;
@@ -3753,6 +3767,7 @@ wss.on("connection", (ws) => {
     console.log("[bridge] New plugin connected, replacing previous connection");
   }
   pluginSocket = ws;
+  pluginContext = null;
   console.log("[bridge] Figma plugin connected");
   ws.on("message", (data) => {
     let msg;
@@ -3763,9 +3778,21 @@ wss.on("connection", (ws) => {
       return;
     }
     if (msg.type === "ping") return;
+    if (msg.type === "hello" && msg.context) {
+      pluginContext = msg.context;
+      console.log(`[bridge] Plugin context: ${msg.context.editorType}`);
+      return;
+    }
+    if (!msg.id) {
+      console.warn("[bridge] Received message without an id");
+      return;
+    }
     const p = pending.get(msg.id);
     if (!p) {
-      console.warn("[bridge] Received response for unknown command id:", msg.id);
+      console.warn(
+        "[bridge] Received response for unknown command id:",
+        msg.id
+      );
       return;
     }
     clearTimeout(p.timer);
@@ -3778,7 +3805,10 @@ wss.on("connection", (ws) => {
   });
   ws.on("close", () => {
     console.log("[bridge] Figma plugin disconnected");
-    if (pluginSocket === ws) pluginSocket = null;
+    if (pluginSocket === ws) {
+      pluginSocket = null;
+      pluginContext = null;
+    }
     for (const [id, p] of pending) {
       clearTimeout(p.timer);
       p.reject(new Error("Figma plugin disconnected"));
