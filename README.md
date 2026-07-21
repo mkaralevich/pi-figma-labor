@@ -82,7 +82,8 @@ MCP tools are preferred for reading. If MCP is unavailable, Labor will use Figma
 | `labor_get_component_set_summary` | Get a component set summary                                    |
 | `labor_reorder_variant_options`   | Reorder variant options on a component set                     |
 | `labor_create_component_set`      | Combine components into a component set                        |
-| `labor_update_properties`         | Change name, position, size, opacity, visibility, rotation     |
+| `labor_update_properties`         | Change generic and supported native product properties         |
+| `labor_update_table`              | Insert, remove, move, or resize FigJam table rows and columns  |
 | `labor_resize_node`               | Resize a node                                                  |
 | `labor_scale_node`                | Scale a node proportionally like Figma Scale tool              |
 | `labor_clone_node`                | Clone a node                                                   |
@@ -111,7 +112,7 @@ Tools are registered when the desktop MCP server is enabled. `/figma-mcp` to see
 | MCP `get_figjam`                           | —            | ✓                                              | —                                              |
 | Desktop MCP screenshots                    | ✓            | ✓                                              | Runtime-dependent; local verification fallback |
 
-Live tests confirmed native sticky, shape, connector, table, and section operations in FigJam, plus focused-slide reads and local writes in Slides. FigJam embedded text fonts must be loaded before changing text. New connectors initially expose an empty font and require a valid fallback before labels can be assigned; code blocks require Source Code Pro Medium before code updates. Compound table-cell IDs work with local reads and text updates. Each successful mutation commits a separate undo checkpoint so `labor_undo` only reverts the latest operation. Slides desktop MCP screenshots were rejected in the tested runtime, so Slides changes are verified through local node reads and viewport zoom.
+Live tests confirmed native sticky, shape, connector, table, code-block, and section operations in FigJam, including connector endpoint/cap updates, table row/column structure changes, sticky display properties, section visibility, and code-block language/content updates. Slides verification confirmed focused-slide placement, slide and row creation, cloning, grid movement, skipped-state updates, transitions, and single-command undo. The tested Slides runtime does not expose native `createShapeWithText()` or `createTable()` methods; use standard frames, rectangles, and text instead. Clearing a slide transition requires a minimum setter duration of `0.01`. FigJam embedded text fonts must be loaded before changing text. New connectors initially expose an empty font and require a valid fallback before labels can be assigned; code blocks require Source Code Pro Medium before code updates. Compound table-cell IDs work with local reads and text updates. Each successful mutation commits a separate undo checkpoint so `labor_undo` only reverts the latest operation. Slides desktop MCP screenshots were rejected in the tested runtime, so Slides changes are verified through local node reads and viewport zoom.
 
 ## Available skills
 

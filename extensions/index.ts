@@ -1138,7 +1138,7 @@ export default function (pi: ExtensionAPI) {
       ),
       shapeType: Type.Optional(
         Type.String({
-          description: "FigJam/Slides SHAPE_WITH_TEXT shape type",
+          description: "FigJam SHAPE_WITH_TEXT shape type",
         }),
       ),
       connectorLineType: Type.Optional(
@@ -1227,7 +1227,7 @@ export default function (pi: ExtensionAPI) {
     name: "labor_update_properties",
     label: "Update Properties",
     description:
-      "Update one or more properties of a node: name, x, y, width, height, opacity (0–1), visible, rotation.",
+      "Update generic node properties plus supported FigJam-native properties for stickies, sections, code blocks, and connectors.",
     parameters: Type.Object({
       nodeId: Type.String({ description: "Node ID" }),
       name: Type.Optional(Type.String({ description: "New name" })),
@@ -1240,10 +1240,139 @@ export default function (pi: ExtensionAPI) {
       rotation: Type.Optional(
         Type.Number({ description: "Rotation in degrees" }),
       ),
+      authorVisible: Type.Optional(
+        Type.Boolean({ description: "STICKY author visibility" }),
+      ),
+      isWideWidth: Type.Optional(
+        Type.Boolean({ description: "Whether a STICKY uses wide format" }),
+      ),
+      sectionContentsHidden: Type.Optional(
+        Type.Boolean({ description: "Whether SECTION contents are hidden" }),
+      ),
+      codeLanguage: Type.Optional(
+        StringEnum(
+          [
+            "TYPESCRIPT",
+            "CPP",
+            "RUBY",
+            "CSS",
+            "JAVASCRIPT",
+            "HTML",
+            "JSON",
+            "GRAPHQL",
+            "PYTHON",
+            "GO",
+            "SQL",
+            "SWIFT",
+            "KOTLIN",
+            "RUST",
+            "BASH",
+            "PLAINTEXT",
+            "DART",
+          ] as const,
+          { description: "CODE_BLOCK language" },
+        ),
+      ),
+      connectorLineType: Type.Optional(
+        StringEnum(["ELBOWED", "STRAIGHT", "CURVED"] as const, {
+          description: "CONNECTOR line type",
+        }),
+      ),
+      connectorStartNodeId: Type.Optional(
+        Type.String({
+          description: "Node ID for the CONNECTOR start endpoint",
+        }),
+      ),
+      connectorEndNodeId: Type.Optional(
+        Type.String({ description: "Node ID for the CONNECTOR end endpoint" }),
+      ),
+      connectorStartMagnet: Type.Optional(
+        StringEnum([
+          "NONE",
+          "AUTO",
+          "TOP",
+          "LEFT",
+          "BOTTOM",
+          "RIGHT",
+          "CENTER",
+        ] as const),
+      ),
+      connectorEndMagnet: Type.Optional(
+        StringEnum([
+          "NONE",
+          "AUTO",
+          "TOP",
+          "LEFT",
+          "BOTTOM",
+          "RIGHT",
+          "CENTER",
+        ] as const),
+      ),
+      connectorStartStrokeCap: Type.Optional(
+        StringEnum([
+          "NONE",
+          "ARROW_EQUILATERAL",
+          "ARROW_LINES",
+          "TRIANGLE_FILLED",
+          "DIAMOND_FILLED",
+          "CIRCLE_FILLED",
+          "ERD_ZERO_OR_ONE",
+          "ERD_EXACTLY_ONE",
+          "ERD_ZERO_OR_MORE",
+          "ERD_ONE_OR_MORE",
+          "ERD_ONE",
+          "ERD_MANY",
+        ] as const),
+      ),
+      connectorEndStrokeCap: Type.Optional(
+        StringEnum([
+          "NONE",
+          "ARROW_EQUILATERAL",
+          "ARROW_LINES",
+          "TRIANGLE_FILLED",
+          "DIAMOND_FILLED",
+          "CIRCLE_FILLED",
+          "ERD_ZERO_OR_ONE",
+          "ERD_EXACTLY_ONE",
+          "ERD_ZERO_OR_MORE",
+          "ERD_ONE_OR_MORE",
+          "ERD_ONE",
+          "ERD_MANY",
+        ] as const),
+      ),
     }),
     async execute(_id, params, signal) {
       const { nodeId, ...properties } = params;
       return runTool("update_properties", { nodeId, properties }, { signal });
+    },
+  });
+
+  pi.registerTool({
+    name: "labor_update_table",
+    label: "Update Table",
+    description:
+      "Insert, remove, move, or resize rows and columns on a FigJam TABLE node.",
+    parameters: Type.Object({
+      nodeId: Type.String({ description: "TABLE node ID" }),
+      action: StringEnum([
+        "INSERT_ROW",
+        "INSERT_COLUMN",
+        "REMOVE_ROW",
+        "REMOVE_COLUMN",
+        "MOVE_ROW",
+        "MOVE_COLUMN",
+        "RESIZE_ROW",
+        "RESIZE_COLUMN",
+      ] as const),
+      rowIndex: Type.Optional(Type.Integer({ minimum: 0 })),
+      columnIndex: Type.Optional(Type.Integer({ minimum: 0 })),
+      fromIndex: Type.Optional(Type.Integer({ minimum: 0 })),
+      toIndex: Type.Optional(Type.Integer({ minimum: 0 })),
+      width: Type.Optional(Type.Number({ minimum: 0.01 })),
+      height: Type.Optional(Type.Number({ minimum: 0.01 })),
+    }),
+    async execute(_id, params, signal) {
+      return runTool("update_table", params, { signal });
     },
   });
 
