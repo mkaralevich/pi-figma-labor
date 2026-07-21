@@ -4,14 +4,21 @@
 - Plugin: {{plugin_status}}
 - Figma MCP tools: {{mcp_status}}
 
+## Editor routing
+
+| Editor | Creation skill        | Inspection and verification                         | Design systems        |
+| ------ | --------------------- | --------------------------------------------------- | --------------------- |
+| Design | `figma-create`        | `get_design_context`, `get_screenshot`, Labor reads | `figma-design-system` |
+| FigJam | `figjam-create`       | `get_figjam` plus Labor reads                       | unsupported           |
+| Slides | `figma-slides-create` | Labor reads, grid inspection, and zoom              | unsupported           |
+
+Use `figma-select` for search and inspection in every editor. Read the matching skill before changing the canvas. Never run component, variant, variable, style, or library workflows in FigJam or Slides.
+
 ## Tool roles
 
-- Use labor tools for canvas reads and writes in Figma Design, FigJam, and Figma Slides
-- The plugin status includes the active editor when available; do not assume Design-only APIs exist in FigJam or Slides
-- Use MCP tools for screenshots and design inspection only when the active editor supports them
-- Use `get_figjam` for FigJam inspection when available
-- Desktop MCP may reject Slides screenshots; verify Slides changes with labor zoom plus node re-reads instead
-- If MCP tools are unavailable, do not call them
+- Use Labor for local canvas reads and writes in Design, FigJam, and Slides
+- Use MCP only when the active editor and available tool support it
+- If an MCP tool is unavailable or rejects the file type, use the Labor equivalent
 
 | MCP tool               | labor equivalent                                                  |
 | ---------------------- | ----------------------------------------------------------------- |
@@ -29,24 +36,22 @@
 
 ## Workflow
 
-- Read selection first
+- Read selection and editor type first
+- Load the matching creation or selection skill
 - Propose briefly
-- Apply changes
-- Verify after each mutation
-  - `mcp: get_screenshot`
-  - `labor: labor_zoom_to_node` + manual inspect
+- Apply changes in small steps
+- Verify through the editor-specific route below
 - Undo immediately if the result is wrong
-- Before any Figma task, check if a `figma-*` skill matches and read it first
 
 ## Verification
 
-- After create, move, update, or delete, verify visually when possible
-  - `mcp: get_screenshot`
-  - `labor: labor_zoom_to_node` + manual inspect
-- Re-read affected nodes when layout or visibility matters
-  - `labor: labor_get_node_full`
-  - `labor: labor_get_children`
-- Do not report success without verification
+| Editor | Preferred route                                                                                 |
+| ------ | ----------------------------------------------------------------------------------------------- |
+| Design | `get_screenshot` or `get_design_context`, then Labor re-read                                    |
+| FigJam | `get_figjam` with images, then Labor re-read                                                    |
+| Slides | Labor node/children/grid reads plus `labor_zoom_to_node`; use MCP screenshots only if supported |
+
+Re-read affected nodes when layout or visibility matters. Do not report success without verification.
 
 ## Reads and writes
 
@@ -78,18 +83,17 @@ frame.counterAxisSpacing = 8;
 
 ## Product behavior
 
-- Figma Design supports components, variants, styles, variables, and libraries
-- FigJam supports native nodes such as stickies, shapes with text, connectors, code blocks, tables, and sections
-- Figma Slides uses `SLIDE`, `SLIDE_ROW`, and `SLIDE_GRID`; create ordinary content inside the focused slide
-- Slides does not support components, styles, variables, or libraries
-- Interactive slide elements can be read and repositioned but not created or edited through the Plugin API
-- In Dev Mode, reads work and writes do not
-- If Design writes fail silently, ask the user to switch to Design Mode
+- Design supports components, variants, styles, variables, and libraries
+- FigJam supports stickies, shapes with text, connectors, code blocks, tables, and sections
+- Slides uses `SLIDE`, `SLIDE_ROW`, and `SLIDE_GRID`; ordinary content defaults to the focused slide
+- Slides does not expose native `createShapeWithText()` or `createTable()` in the tested runtime; compose with frames, rectangles, and text
+- Interactive slide elements are read/move-only and cannot be created through the Plugin API
+- In Dev Mode, reads work and writes do not; ask the user to switch to Design Mode for writes
 
 ## Error recovery
 
 - On `labor_run_script` error, stop and inspect the message before retrying
-- Failed scripts are atomic; no partial file changes are applied
+- Failed scripts may leave partial canvas mutations; inspect and remove them before retrying
 - Common causes:
   - wrong node ID
   - 0–255 colors instead of 0–1

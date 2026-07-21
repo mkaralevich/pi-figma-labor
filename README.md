@@ -116,12 +116,14 @@ Live tests confirmed native sticky, shape, connector, table, code-block, and sec
 
 ## Available skills
 
-| Skill                 | Description                                                     |
-| --------------------- | --------------------------------------------------------------- |
-| `figma-create`        | Create, clone, compose, and insert UI in Figma                  |
-| `figma-design-system` | Work with variables, tokens, components, variants, and styles   |
-| `figma-select`        | Find, inspect, extract, and batch-select Figma nodes            |
-| `figma-prototype`     | (WIP) Prototype flows, reactions, transitions, and start points |
+| Skill                 | Description                                                        |
+| --------------------- | ------------------------------------------------------------------ |
+| `figma-create`        | Create, clone, compose, and insert UI in Figma                     |
+| `figjam-create`       | Create and edit native FigJam board content                        |
+| `figma-slides-create` | Create slides, rows, focused-slide content, grids, and transitions |
+| `figma-design-system` | Work with variables, tokens, components, variants, and styles      |
+| `figma-select`        | Find, inspect, extract, and batch-select Figma nodes               |
+| `figma-prototype`     | (WIP) Prototype flows, reactions, transitions, and start points    |
 
 ## Development
 

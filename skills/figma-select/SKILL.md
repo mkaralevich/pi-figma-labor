@@ -28,12 +28,12 @@ Find, inspect, and batch-read Figma nodes with labor tools.
 const root = await figma.getNodeByIdAsync("NODE_ID");
 
 function walk(node, depth) {
-	const info = { name: node.name, type: node.type, id: node.id };
-	if (node.type === "TEXT") info.chars = node.characters;
-	if (depth > 0 && "children" in node) {
-		info.children = node.children.map((child) => walk(child, depth - 1));
-	}
-	return info;
+  const info = { name: node.name, type: node.type, id: node.id };
+  if (node.type === "TEXT") info.chars = node.characters;
+  if (depth > 0 && "children" in node) {
+    info.children = node.children.map((child) => walk(child, depth - 1));
+  }
+  return info;
 }
 
 return walk(root, 2);
@@ -41,21 +41,126 @@ return walk(root, 2);
 
 ## Core tools
 
-| Tool | Use for |
-|---|---|
-| `labor_get_selection` | read current selection |
-| `labor_get_children` | list direct children |
-| `labor_get_node` | read basic properties of a known node |
-| `labor_get_node_full` | read full layout and constraint data |
-| `labor_select_node` | select one node and zoom to it |
-| `labor_run_script` | advanced search, filtering, inspection, batch reads |
+| Tool                  | Use for                                             |
+| --------------------- | --------------------------------------------------- |
+| `labor_get_selection` | read current selection                              |
+| `labor_get_children`  | list direct children                                |
+| `labor_get_node`      | read basic properties of a known node               |
+| `labor_get_node_full` | read full layout and constraint data                |
+| `labor_select_node`   | select one node and zoom to it                      |
+| `labor_run_script`    | advanced search, filtering, inspection, batch reads |
+
+## Product context
+
+Check the editor before product-specific reads:
+
+```js
+const page = figma.currentPage;
+return {
+  editorType: figma.editorType,
+  page: { id: page.id, name: page.name },
+  selection: page.selection.map((n) => ({
+    id: n.id,
+    name: n.name,
+    type: n.type,
+  })),
+  focusedSlide:
+    figma.editorType === "slides" && page.focusedSlide
+      ? { id: page.focusedSlide.id, name: page.focusedSlide.name }
+      : null,
+};
+```
+
+### FigJam types
+
+Search for:
+
+- `STICKY`
+- `SHAPE_WITH_TEXT`
+- `CONNECTOR`
+- `CODE_BLOCK`
+- `TABLE` / `TABLE_CELL`
+- `SECTION`
+- `STAMP`
+- `HIGHLIGHT`
+- `WIDGET`
+- `EMBED` / `LINK_UNFURL` / `MEDIA`
+
+Read embedded text through `node.text.characters`; code blocks use `node.code`.
+
+```js
+const native = figma.currentPage.findAll((node) =>
+  [
+    "STICKY",
+    "SHAPE_WITH_TEXT",
+    "CONNECTOR",
+    "CODE_BLOCK",
+    "TABLE",
+    "SECTION",
+  ].includes(node.type),
+);
+return native.map((node) => ({
+  id: node.id,
+  name: node.name,
+  type: node.type,
+  text: "text" in node ? node.text?.characters : undefined,
+  code: node.type === "CODE_BLOCK" ? node.code : undefined,
+}));
+```
+
+For tables, use `labor_get_children`; cells include `rowIndex` and `columnIndex`. For connectors, inspect start/end endpoints, magnets, line type, and caps.
+
+### Slides types
+
+Search for:
+
+- `SLIDE`
+- `SLIDE_ROW`
+- `SLIDE_GRID`
+- `INTERACTIVE_SLIDE_ELEMENT`
+
+Read grid position from `figma.getCanvasGrid()` rather than node coordinates alone:
+
+```js
+return figma.getCanvasGrid().map((row, rowIndex) => ({
+  rowIndex,
+  slides: row.map((slide, columnIndex) => ({
+    id: slide.id,
+    name: slide.name,
+    columnIndex,
+    isSkippedSlide: slide.isSkippedSlide,
+    transition: slide.getSlideTransition(),
+  })),
+}));
+```
+
+Inspect interactive elements without editing them:
+
+```js
+return figma.currentPage
+  .findAll((node) => node.type === "INTERACTIVE_SLIDE_ELEMENT")
+  .map((node) => ({
+    id: node.id,
+    name: node.name,
+    subtype: node.interactiveSlideElementType,
+    parent: node.parent?.id,
+  }));
+```
+
+## Product rules
+
+- Components, variants, variables, and styles are Design-only.
+- Scope FigJam searches to a section when possible.
+- Scope Slides content searches to the focused or known slide.
+- Do not use Design-only hierarchy assumptions for FigJam or Slides.
+- In Slides, verify row/column through the canvas grid after structural changes.
 
 ## Selection patterns
 
 ### Select one node
 
 ```js
-labor_select_node({ nodeId: "123:456" })
+labor_select_node({ nodeId: "123:456" });
 ```
 
 ### Select multiple nodes
@@ -64,8 +169,8 @@ labor_select_node({ nodeId: "123:456" })
 const ids = ["123:456", "123:457", "123:458"];
 const nodes = [];
 for (const id of ids) {
-	const node = await figma.getNodeByIdAsync(id);
-	if (node) nodes.push(node);
+  const node = await figma.getNodeByIdAsync(id);
+  if (node) nodes.push(node);
 }
 figma.currentPage.selection = nodes;
 figma.viewport.scrollAndZoomIntoView(nodes);
@@ -87,12 +192,14 @@ return `Selected ${selected.children.length} children`;
 
 ```js
 const exact = figma.currentPage.findAll((node) => node.name === "Button");
-const contains = figma.currentPage.findAll((node) => node.name.includes("icon"));
+const contains = figma.currentPage.findAll((node) =>
+  node.name.includes("icon"),
+);
 const regex = figma.currentPage.findAll((node) => /^Header\//.test(node.name));
 return {
-	exact: exact.length,
-	contains: contains.length,
-	regex: regex.length,
+  exact: exact.length,
+  contains: contains.length,
+  regex: regex.length,
 };
 ```
 
@@ -100,7 +207,11 @@ return {
 
 ```js
 const texts = figma.currentPage.findAll((node) => node.type === "TEXT");
-return texts.map((node) => ({ id: node.id, name: node.name, text: node.characters }));
+return texts.map((node) => ({
+  id: node.id,
+  name: node.name,
+  text: node.characters,
+}));
 ```
 
 ### Find instances of one component
@@ -109,10 +220,10 @@ return texts.map((node) => ({ id: node.id, name: node.name, text: node.character
 const instances = figma.currentPage.findAll((node) => node.type === "INSTANCE");
 const matches = [];
 for (const instance of instances) {
-	const main = await instance.getMainComponentAsync();
-	if (main?.name === "Button" || main?.parent?.name === "Button") {
-		matches.push({ id: instance.id, name: instance.name });
-	}
+  const main = await instance.getMainComponentAsync();
+  if (main?.name === "Button" || main?.parent?.name === "Button") {
+    matches.push({ id: instance.id, name: instance.name });
+  }
 }
 return matches;
 ```
@@ -123,17 +234,18 @@ return matches;
 const hidden = figma.currentPage.findAll((node) => node.visible === false);
 const faded = figma.currentPage.findAll((node) => node.opacity < 0.5);
 const red = figma.currentPage.findAll(
-	(node) =>
-		"fills" in node &&
-		Array.isArray(node.fills) &&
-		node.fills.some(
-			(fill) => fill.type === "SOLID" && fill.color.r > 0.9 && fill.color.g < 0.1
-		)
+  (node) =>
+    "fills" in node &&
+    Array.isArray(node.fills) &&
+    node.fills.some(
+      (fill) =>
+        fill.type === "SOLID" && fill.color.r > 0.9 && fill.color.g < 0.1,
+    ),
 );
 return {
-	hidden: hidden.length,
-	faded: faded.length,
-	red: red.length,
+  hidden: hidden.length,
+  faded: faded.length,
+  red: red.length,
 };
 ```
 
@@ -142,7 +254,7 @@ return {
 ```js
 const query = "Submit";
 const texts = figma.currentPage.findAll(
-	(node) => node.type === "TEXT" && node.characters.includes(query)
+  (node) => node.type === "TEXT" && node.characters.includes(query),
 );
 return texts.map((node) => ({ id: node.id, text: node.characters }));
 ```
@@ -170,8 +282,14 @@ return texts.length;
 ```js
 figma.skipInvisibleInstanceChildren = true;
 const instanceId = "I123:456";
-const children = figma.currentPage.findAll((node) => node.id.startsWith(instanceId + ";"));
-return children.map((node) => ({ id: node.id, name: node.name, type: node.type }));
+const children = figma.currentPage.findAll((node) =>
+  node.id.startsWith(instanceId + ";"),
+);
+return children.map((node) => ({
+  id: node.id,
+  name: node.name,
+  type: node.type,
+}));
 ```
 
 ## Inspection patterns
@@ -187,44 +305,56 @@ return children.map((node) => ({ id: node.id, name: node.name, type: node.type }
 
 ```js
 const root = await figma.getNodeByIdAsync("FRAME_ID");
-const styles = { fills: new Map(), effects: [], fonts: new Map(), radii: new Set() };
+const styles = {
+  fills: new Map(),
+  effects: [],
+  fonts: new Map(),
+  radii: new Set(),
+};
 
 root.findAll((node) => {
-	if ("fills" in node && Array.isArray(node.fills)) {
-		for (const fill of node.fills) {
-			if (fill.type === "SOLID" && fill.visible !== false) {
-				const key = `${fill.color.r.toFixed(3)},${fill.color.g.toFixed(3)},${fill.color.b.toFixed(3)},${fill.opacity ?? 1}`;
-				styles.fills.set(key, { color: fill.color, opacity: fill.opacity ?? 1 });
-			}
-		}
-	}
+  if ("fills" in node && Array.isArray(node.fills)) {
+    for (const fill of node.fills) {
+      if (fill.type === "SOLID" && fill.visible !== false) {
+        const key = `${fill.color.r.toFixed(3)},${fill.color.g.toFixed(3)},${fill.color.b.toFixed(3)},${fill.opacity ?? 1}`;
+        styles.fills.set(key, {
+          color: fill.color,
+          opacity: fill.opacity ?? 1,
+        });
+      }
+    }
+  }
 
-	if ("effects" in node && node.effects?.length) {
-		for (const effect of node.effects) {
-			styles.effects.push({ type: effect.type, radius: effect.radius });
-		}
-	}
+  if ("effects" in node && node.effects?.length) {
+    for (const effect of node.effects) {
+      styles.effects.push({ type: effect.type, radius: effect.radius });
+    }
+  }
 
-	if (node.type === "TEXT") {
-		const fontName = node.fontName;
-		if (fontName && fontName !== figma.mixed) {
-			const key = `${fontName.family}/${fontName.style}/${node.fontSize}`;
-			styles.fonts.set(key, { family: fontName.family, style: fontName.style, size: node.fontSize });
-		}
-	}
+  if (node.type === "TEXT") {
+    const fontName = node.fontName;
+    if (fontName && fontName !== figma.mixed) {
+      const key = `${fontName.family}/${fontName.style}/${node.fontSize}`;
+      styles.fonts.set(key, {
+        family: fontName.family,
+        style: fontName.style,
+        size: node.fontSize,
+      });
+    }
+  }
 
-	if ("cornerRadius" in node && node.cornerRadius > 0) {
-		styles.radii.add(node.cornerRadius);
-	}
+  if ("cornerRadius" in node && node.cornerRadius > 0) {
+    styles.radii.add(node.cornerRadius);
+  }
 
-	return false;
+  return false;
 });
 
 return {
-	fills: [...styles.fills.values()],
-	fonts: [...styles.fonts.values()],
-	radii: [...styles.radii],
-	effectTypes: [...new Set(styles.effects.map((effect) => effect.type))],
+  fills: [...styles.fills.values()],
+  fonts: [...styles.fonts.values()],
+  radii: [...styles.radii],
+  effectTypes: [...new Set(styles.effects.map((effect) => effect.type))],
 };
 ```
 
@@ -239,28 +369,28 @@ const varMap = new Map();
 
 const nodes = root.findAll(() => true);
 for (const node of nodes) {
-	const boundVariables = node.boundVariables;
-	if (!boundVariables) continue;
+  const boundVariables = node.boundVariables;
+  if (!boundVariables) continue;
 
-	for (const [prop, binding] of Object.entries(boundVariables)) {
-		const bindings = Array.isArray(binding) ? binding : [binding];
-		for (const item of bindings) {
-			if (item?.id && !varMap.has(item.id)) {
-				const variable = await figma.variables.getVariableByIdAsync(item.id);
-				if (variable) {
-					varMap.set(item.id, {
-						name: variable.name,
-						id: variable.id,
-						key: variable.key,
-						type: variable.resolvedType,
-						remote: variable.remote,
-						boundTo: prop,
-						onNode: node.name,
-					});
-				}
-			}
-		}
-	}
+  for (const [prop, binding] of Object.entries(boundVariables)) {
+    const bindings = Array.isArray(binding) ? binding : [binding];
+    for (const item of bindings) {
+      if (item?.id && !varMap.has(item.id)) {
+        const variable = await figma.variables.getVariableByIdAsync(item.id);
+        if (variable) {
+          varMap.set(item.id, {
+            name: variable.name,
+            id: variable.id,
+            key: variable.key,
+            type: variable.resolvedType,
+            remote: variable.remote,
+            boundTo: prop,
+            onNode: node.name,
+          });
+        }
+      }
+    }
+  }
 }
 
 return [...varMap.values()];
@@ -277,23 +407,23 @@ const uniqueSets = new Map();
 
 const instances = root.findAll((node) => node.type === "INSTANCE");
 for (const instance of instances) {
-	const main = await instance.getMainComponentAsync();
-	if (!main) continue;
-	const set = main.parent?.type === "COMPONENT_SET" ? main.parent : null;
-	const key = set ? set.id : main.id;
-	const name = set ? set.name : main.name;
+  const main = await instance.getMainComponentAsync();
+  if (!main) continue;
+  const set = main.parent?.type === "COMPONENT_SET" ? main.parent : null;
+  const key = set ? set.id : main.id;
+  const name = set ? set.name : main.name;
 
-	if (!uniqueSets.has(key)) {
-		uniqueSets.set(key, {
-			name,
-			id: key,
-			isSet: !!set,
-			sampleVariant: main.name,
-			instanceCount: 1,
-		});
-	} else {
-		uniqueSets.get(key).instanceCount++;
-	}
+  if (!uniqueSets.has(key)) {
+    uniqueSets.set(key, {
+      name,
+      id: key,
+      isSet: !!set,
+      sampleVariant: main.name,
+      instanceCount: 1,
+    });
+  } else {
+    uniqueSets.get(key).instanceCount++;
+  }
 }
 
 return [...uniqueSets.values()];
@@ -308,19 +438,29 @@ const root = await figma.getNodeByIdAsync("FRAME_ID");
 const styles = { text: new Map(), effect: new Map() };
 
 for (const node of root.findAll(() => true)) {
-	if ("textStyleId" in node && node.textStyleId) {
-		const style = await figma.getStyleByIdAsync(node.textStyleId);
-		if (style) styles.text.set(style.id, { name: style.name, id: style.id, key: style.key });
-	}
-	if ("effectStyleId" in node && node.effectStyleId) {
-		const style = await figma.getStyleByIdAsync(node.effectStyleId);
-		if (style) styles.effect.set(style.id, { name: style.name, id: style.id, key: style.key });
-	}
+  if ("textStyleId" in node && node.textStyleId) {
+    const style = await figma.getStyleByIdAsync(node.textStyleId);
+    if (style)
+      styles.text.set(style.id, {
+        name: style.name,
+        id: style.id,
+        key: style.key,
+      });
+  }
+  if ("effectStyleId" in node && node.effectStyleId) {
+    const style = await figma.getStyleByIdAsync(node.effectStyleId);
+    if (style)
+      styles.effect.set(style.id, {
+        name: style.name,
+        id: style.id,
+        key: style.key,
+      });
+  }
 }
 
 return {
-	textStyles: [...styles.text.values()],
-	effectStyles: [...styles.effect.values()],
+  textStyles: [...styles.text.values()],
+  effectStyles: [...styles.effect.values()],
 };
 ```
 
@@ -333,29 +473,29 @@ return {
 const root = await figma.getNodeByIdAsync("FRAME_ID");
 
 function layoutInfo(node) {
-	if (!("layoutMode" in node) || node.layoutMode === "NONE") return null;
-	return {
-		name: node.name,
-		id: node.id,
-		layoutMode: node.layoutMode,
-		primaryAxisSizingMode: node.primaryAxisSizingMode,
-		counterAxisSizingMode: node.counterAxisSizingMode,
-		primaryAxisAlignItems: node.primaryAxisAlignItems,
-		counterAxisAlignItems: node.counterAxisAlignItems,
-		itemSpacing: node.itemSpacing,
-		paddingTop: node.paddingTop,
-		paddingRight: node.paddingRight,
-		paddingBottom: node.paddingBottom,
-		paddingLeft: node.paddingLeft,
-		children: node.children?.length,
-	};
+  if (!("layoutMode" in node) || node.layoutMode === "NONE") return null;
+  return {
+    name: node.name,
+    id: node.id,
+    layoutMode: node.layoutMode,
+    primaryAxisSizingMode: node.primaryAxisSizingMode,
+    counterAxisSizingMode: node.counterAxisSizingMode,
+    primaryAxisAlignItems: node.primaryAxisAlignItems,
+    counterAxisAlignItems: node.counterAxisAlignItems,
+    itemSpacing: node.itemSpacing,
+    paddingTop: node.paddingTop,
+    paddingRight: node.paddingRight,
+    paddingBottom: node.paddingBottom,
+    paddingLeft: node.paddingLeft,
+    children: node.children?.length,
+  };
 }
 
 const layouts = [];
 root.findAll((node) => {
-	const info = layoutInfo(node);
-	if (info) layouts.push(info);
-	return false;
+  const info = layoutInfo(node);
+  if (info) layouts.push(info);
+  return false;
 });
 return layouts;
 ```
@@ -369,9 +509,12 @@ return layouts;
 ```js
 const compSet = await figma.getNodeByIdAsync("COMP_SET_ID");
 return {
-	name: compSet.name,
-	propDefs: compSet.componentPropertyDefinitions,
-	variants: compSet.children.map((child) => ({ id: child.id, name: child.name })),
+  name: compSet.name,
+  propDefs: compSet.componentPropertyDefinitions,
+  variants: compSet.children.map((child) => ({
+    id: child.id,
+    name: child.name,
+  })),
 };
 ```
 
@@ -379,10 +522,16 @@ return {
 
 ```js
 let current = await figma.getNodeByIdAsync("123:456");
-while (current && current.type !== "COMPONENT" && current.type !== "COMPONENT_SET") {
-	current = current.parent;
+while (
+  current &&
+  current.type !== "COMPONENT" &&
+  current.type !== "COMPONENT_SET"
+) {
+  current = current.parent;
 }
-return current ? { type: current.type, name: current.name, id: current.id } : null;
+return current
+  ? { type: current.type, name: current.name, id: current.id }
+  : null;
 ```
 
 ## Batch-read repeated structures
@@ -394,8 +543,8 @@ return current ? { type: current.type, name: current.name, id: current.id } : nu
 const frame = await figma.getNodeByIdAsync("FRAME_ID");
 if (!frame || !("children" in frame)) return "not a frame";
 return frame.children.map((child) => ({
-	name: child.children?.find((node) => node.type === "TEXT")?.characters,
-	componentId: child.children?.find((node) => node.type !== "TEXT")?.id,
+  name: child.children?.find((node) => node.type === "TEXT")?.characters,
+  componentId: child.children?.find((node) => node.type !== "TEXT")?.id,
 }));
 ```
 
@@ -408,10 +557,10 @@ const componentName = "Card";
 const instances = figma.currentPage.findAll((node) => node.type === "INSTANCE");
 const matches = [];
 for (const instance of instances) {
-	const main = await instance.getMainComponentAsync();
-	if (main?.name === componentName || main?.parent?.name === componentName) {
-		matches.push(instance);
-	}
+  const main = await instance.getMainComponentAsync();
+  if (main?.name === componentName || main?.parent?.name === componentName) {
+    matches.push(instance);
+  }
 }
 figma.currentPage.selection = matches;
 figma.viewport.scrollAndZoomIntoView(matches);
@@ -423,11 +572,14 @@ return `Selected ${matches.length} instances of ${componentName}`;
 ```js
 const colors = figma.getSelectionColors();
 return colors
-	? {
-		paints: colors.paints.length,
-		styles: colors.styles.map((style) => ({ id: style.id, name: style.name })),
-	}
-	: "No selection colors";
+  ? {
+      paints: colors.paints.length,
+      styles: colors.styles.map((style) => ({
+        id: style.id,
+        name: style.name,
+      })),
+    }
+  : "No selection colors";
 ```
 
 ### Audit selection colors
@@ -442,9 +594,9 @@ return colors
 const colors = figma.getSelectionColors();
 if (!colors) return "No selection or too many colors";
 return {
-	paintCount: colors.paints.length,
-	styleCount: colors.styles.length,
-	styles: colors.styles.map((style) => ({ name: style.name, id: style.id })),
+  paintCount: colors.paints.length,
+  styleCount: colors.styles.length,
+  styles: colors.styles.map((style) => ({ name: style.name, id: style.id })),
 };
 ```
 
