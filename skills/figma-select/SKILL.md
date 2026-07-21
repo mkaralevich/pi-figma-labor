@@ -9,6 +9,8 @@ Find, inspect, and batch-read Figma nodes with labor tools.
 
 ## Core workflow
 
+- Call `labor_get_selection` first for lightweight editor, page, and selection discovery
+- Wait for discovery before choosing an editor-specific MCP tool
 - Discover structure first
 - Extract second
 - Keep reads tight
@@ -17,7 +19,8 @@ Find, inspect, and batch-read Figma nodes with labor tools.
 
 ## Discovery first
 
-- First `labor_run_script` call should show structure
+- `labor_get_selection` is the mandatory lightweight routing call
+- The first `labor_run_script` call should show only the structure needed for the task
 - Do not start with random property reads
 - Often a shallow tree is enough to answer the task
 - Good target:
@@ -70,6 +73,13 @@ return {
       : null,
 };
 ```
+
+Route from the `editorType` returned by `labor_get_selection`:
+
+- `figma` or `dev` → Design MCP tools are available
+- `figjam` → use `get_figjam`; do not call `get_design_context`
+- `slides` → use Labor reads and grid inspection
+- Unknown editor → use Labor as the safe fallback
 
 ### FigJam types
 

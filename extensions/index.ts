@@ -60,8 +60,10 @@ let mcpAvailableTools: Array<{ name: string; description: string }> = [];
 
 // ## STATES
 
+type EditorType = "figma" | "figjam" | "slides" | "dev" | "buzz";
+
 interface PluginContext {
-  editorType: "figma" | "figjam" | "slides" | "dev" | "buzz";
+  editorType: EditorType;
   page: { id: string; name: string };
   selectionCount: number;
   focusedSlide?: { id: string; name: string } | null;
@@ -214,7 +216,11 @@ function stopBridge() {
 async function runTool(
   command: string,
   params: Record<string, unknown>,
-  opts?: { timeout?: number; signal?: AbortSignal },
+  opts?: {
+    timeout?: number;
+    signal?: AbortSignal;
+    includeContext?: boolean;
+  },
 ) {
   const status = await bridgeStatus();
 
@@ -243,6 +249,8 @@ async function runTool(
     };
   }
 
+  cachedStatus = status;
+
   // Execute command
   try {
     const result = await bridgeCommand(command, params, opts);
@@ -261,9 +269,16 @@ async function runTool(
         isError: true,
       };
     }
+    const output = opts?.includeContext
+      ? {
+          editorType: status.context?.editorType ?? null,
+          page: status.context?.page ?? null,
+          selection: result,
+        }
+      : result;
     return {
       content: [
-        { type: "text" as const, text: JSON.stringify(result, null, 2) },
+        { type: "text" as const, text: JSON.stringify(output, null, 2) },
       ],
     };
   } catch (err) {
@@ -476,6 +491,40 @@ function normalizeMcpNodeId(value: string): string {
   return plainMatch[1].replace(/-/g, ":");
 }
 
+const MCP_EDITOR_ROUTES: Partial<
+  Record<
+    string,
+    {
+      editors: readonly EditorType[];
+      fallback: string;
+    }
+  >
+> = {
+  get_design_context: {
+    editors: ["figma", "dev"],
+    fallback: "Use get_figjam in FigJam or Labor reads in Slides.",
+  },
+  get_metadata: {
+    editors: ["figma", "dev"],
+    fallback: "Use Labor reads outside Figma Design.",
+  },
+  get_variable_defs: {
+    editors: ["figma", "dev"],
+    fallback: "Variables are only supported in Figma Design.",
+  },
+  get_figjam: {
+    editors: ["figjam"],
+    fallback: "Use get_design_context in Design or Labor reads in Slides.",
+  },
+};
+
+function mcpEditorRoutingError(name: string): string | null {
+  const route = MCP_EDITOR_ROUTES[name];
+  const editor = cachedStatus?.context?.editorType;
+  if (!route || !editor || route.editors.includes(editor)) return null;
+  return `${name} does not support the current ${editor} editor. ${route.fallback}`;
+}
+
 function normalizeMcpArgs(
   name: string,
   args: Record<string, unknown>,
@@ -544,6 +593,14 @@ function registerFigmaMcp(pi: ExtensionAPI) {
         description: tool.description,
         parameters: buildMcpSchema(tool.inputSchema),
         async execute(_id, params, signal, _onUpdate, ctx) {
+          const routingError = mcpEditorRoutingError(tool.name);
+          if (routingError) {
+            return {
+              content: [{ type: "text", text: routingError }],
+              isError: true,
+            };
+          }
+
           if (!mcpSessionId) {
             const ok = await initializeMcpSession(signal);
             if (!ok) {
@@ -871,10 +928,10 @@ export default function (pi: ExtensionAPI) {
     name: "labor_get_selection",
     label: "Get Selection",
     description:
-      "Get the currently selected nodes in Figma. Always call this first to understand what the user has selected.",
+      "Lightweight discovery: get the active editor, page, and currently selected nodes. Always call this first before editor-specific tools.",
     parameters: Type.Object({}),
     async execute(_id, _params, signal) {
-      return runTool("get_selection", {}, { signal });
+      return runTool("get_selection", {}, { signal, includeContext: true });
     },
   });
 

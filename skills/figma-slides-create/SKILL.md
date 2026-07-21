@@ -14,8 +14,9 @@ Build presentation content with Labor tools.
 3. Read `currentPage.focusedSlide` and the canvas grid.
 4. Create content inside the focused slide.
 5. Create or reorder slides in small steps.
-6. Verify with Labor reads and viewport zoom.
-7. Restore the original grid after temporary tests.
+6. Run `get_screenshot` on the created or changed slide for the final visual audit.
+7. Verify structure with Labor reads, the canvas grid, and viewport zoom.
+8. Restore the original grid after temporary tests.
 
 ## Read Slides context
 
@@ -121,12 +122,16 @@ Do not attempt to create or edit their interactive content.
 
 ## Verification
 
-Desktop MCP screenshots may reject Slides files. Use:
+At the end, attempt `get_screenshot` on the created or changed slide first. Use it to catch clipping, overlap, spacing, and alignment issues quickly.
+
+Desktop MCP screenshots may reject Slides files in some runtimes. If that happens, continue with the local fallback instead of treating verification as complete:
 
 - `labor_get_node`
 - `labor_get_children`
 - `labor_zoom_to_node`
 - `figma.getCanvasGrid()` through `labor_run_script`
+
+After a successful screenshot, still use the Labor and grid reads when hierarchy, grid position, skipped state, or transitions matter.
 
 Check:
 

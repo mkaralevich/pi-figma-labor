@@ -13,9 +13,10 @@ Build native FigJam content with Labor tools.
 2. Confirm `figma.editorType === "figjam"` when unclear.
 3. Inspect nearby nodes and open canvas space.
 4. Create one native pattern first.
-5. Verify it with `get_figjam` and a Labor read.
+5. Verify the first pattern with `get_screenshot`, `get_figjam`, and a Labor read.
 6. Batch the remaining nodes.
-7. Remove temporary test nodes.
+7. Run `get_screenshot` on the created or changed root node for the final visual audit.
+8. Re-read affected nodes and remove temporary test nodes.
 
 ## Prefer native nodes
 
@@ -113,10 +114,15 @@ Dedicated text tools load required fonts. In `labor_run_script`, load fonts befo
 
 ## Verification
 
+At the end, always run `get_screenshot` on the created or changed root node. Use it as the first visual audit because it exposes clipping, overlap, spacing, and alignment issues quickly.
+
+Then verify structure and native FigJam properties with:
+
 - `get_figjam({ nodeId, includeImagesOfNodes: true })`
 - `labor_get_node`
 - `labor_get_children`
-- `labor_zoom_to_node`
+
+If `get_screenshot` is unavailable, use the image from `get_figjam` or `labor_zoom_to_node` for manual inspection.
 
 Check:
 

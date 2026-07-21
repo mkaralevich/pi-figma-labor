@@ -15,9 +15,9 @@ Build new elements and compose them into existing layouts with labor tools.
 - Verify the first working pattern before batching
 - Validate section by section, not only at the end
 - Check for clipped text, overlaps, placeholder text, and wrong variants
-- Use this verification pattern:
-  - `mcp: get_screenshot`
-  - `labor: labor_zoom_to_node` + manual inspect
+- At the end, always run `get_screenshot` on the created or changed root node for the final visual audit
+- Follow the screenshot with a Labor re-read when layout, hierarchy, or visibility matters
+- If `get_screenshot` is unavailable, use `labor_zoom_to_node` and manually inspect
 
 ## Script size
 
@@ -280,6 +280,7 @@ return { ok: true, id: test.id, children: parent.children.length };
 
 ## Completion checklist
 
+- Final visual verification ran with `get_screenshot` on the created or changed root node
 - Every `labor_run_script` returned useful output
 - New element was verified in isolation
   - `mcp: get_screenshot`

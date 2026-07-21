@@ -36,7 +36,8 @@ Use `figma-select` for search and inspection in every editor. Read the matching 
 
 ## Workflow
 
-- Read selection and editor type first
+- Call `labor_get_selection` first; it is the lightweight discovery call and returns editor type, page, and selection
+- Wait for discovery before calling editor-specific MCP tools; do not speculate from the selected node type
 - Load the matching creation or selection skill
 - Propose briefly
 - Apply changes in small steps

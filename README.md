@@ -112,7 +112,6 @@ Tools are registered when the desktop MCP server is enabled. `/figma-mcp` to see
 | MCP `get_figjam`                           | —            | ✓                                              | —                                              |
 | Desktop MCP screenshots                    | ✓            | ✓                                              | Runtime-dependent; local verification fallback |
 
-Live tests confirmed native sticky, shape, connector, table, code-block, and section operations in FigJam, including connector endpoint/cap updates, table row/column structure changes, sticky display properties, section visibility, and code-block language/content updates. Slides verification confirmed focused-slide placement, slide and row creation, cloning, grid movement, skipped-state updates, transitions, and single-command undo. The tested Slides runtime does not expose native `createShapeWithText()` or `createTable()` methods; use standard frames, rectangles, and text instead. Clearing a slide transition requires a minimum setter duration of `0.01`. FigJam embedded text fonts must be loaded before changing text. New connectors initially expose an empty font and require a valid fallback before labels can be assigned; code blocks require Source Code Pro Medium before code updates. Compound table-cell IDs work with local reads and text updates. Each successful mutation commits a separate undo checkpoint so `labor_undo` only reverts the latest operation. Slides desktop MCP screenshots were rejected in the tested runtime, so Slides changes are verified through local node reads and viewport zoom.
 
 ## Available skills
 
@@ -126,10 +125,6 @@ Live tests confirmed native sticky, shape, connector, table, code-block, and sec
 | `figma-prototype`     | (WIP) Prototype flows, reactions, transitions, and start points    |
 
 ## Development
-
-The Figma plugin is maintained separately in [mkaralevich/figma-labor](https://github.com/mkaralevich/figma-labor) (`../figma-pi-labor` in the local workspace). Its manifests, Plugin API code, UI, typings, and release instructions live there. The pi extension and WebSocket bridge live in this repository.
-
-The plugin manifests target Figma Design, FigJam, and Figma Slides. Figma does not allow one plugin manifest to target both FigJam and Dev Mode, so local canvas operations prioritize the three design products; desktop MCP remains the Dev Mode integration.
 
 If you modify `bridge-src/src/server.ts`:
 
