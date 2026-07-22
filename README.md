@@ -26,7 +26,7 @@ pi install https://github.com/mkaralevich/pi-figma-labor
 ## Use
 
 - Bridge auto-starts when pi launches
-- Open _Pi Labor_ in Figma Design, FigJam, or Figma Slides ([Shopify](https://www.figma.com/community/plugin/1611556075783258900/figma-labor) | Public TBD)
+- Open _Pi Labor_ in Figma Design, FigJam, or Figma Slides ([Shopify](https://www.figma.com/community/plugin/1611556075783258900/figma-labor) | [Public](https://www.figma.com/community/plugin/1613311015678232787))
 - Ask your `pi` to do things
 
 Extension includes **Desktop Figma MCP**. To enable:
