@@ -276,10 +276,14 @@ async function runTool(
           selection: result,
         }
       : result;
+    // JSON.stringify(undefined) returns undefined (not a string). That happens whenever a
+    // labor_run_script script ends without a `return` value, and writes a malformed
+    // {"type":"text"} block (no text string) into the pi session log — making the session
+    // permanently unresumable ("Cannot read properties of undefined (reading 'length')").
+    const text =
+      JSON.stringify(output, null, 2) ?? "(script returned no value)";
     return {
-      content: [
-        { type: "text" as const, text: JSON.stringify(output, null, 2) },
-      ],
+      content: [{ type: "text" as const, text }],
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
