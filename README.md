@@ -25,7 +25,8 @@ pi install https://github.com/mkaralevich/pi-figma-labor
 
 ## Use
 
-- Bridge auto-starts when pi launches
+- Bridge auto-starts when pi launches, and any Labor tool call starts it if it isn't running
+- The bridge outlives the session that started it, so one pi session ending (a subagent, a closed window, `/reload`) never drops the plugin for the others. It is a tiny local server; stop it with `/figma-labor-stop`
 - Open _Pi Labor_ in Figma Design, FigJam, or Figma Slides ([Shopify](https://www.figma.com/community/plugin/1611556075783258900/figma-labor) | [Public](https://www.figma.com/community/plugin/1613311015678232787))
 - Ask your `pi` to do things
 
@@ -46,7 +47,7 @@ FIGMA_MCP_PORT=3845 pi
 | Command              | Description                                           |
 | -------------------- | ----------------------------------------------------- |
 | `/figma-labor-start` | Start bridge server manually                          |
-| `/figma-labor-stop`  | Stop bridge server manually                           |
+| `/figma-labor-stop`  | Stop the bridge server (the plugin reconnects when it starts again) |
 | `/figma-labor`       | Show bridge status and connected Figma files          |
 | `/figma-mcp`         | Show Figma MCP server status and list available tools |
 
@@ -146,3 +147,9 @@ cd bridge-src && npm install && npm run build
 ```
 
 This rebundles `bridge.js` into the `extensions/` directory.
+
+A bridge that is already running keeps the old code after you rebuild `bridge.js`. Run `/figma-labor-stop`, then any Labor tool call or `/figma-labor-start`; the plugin reconnects within a few seconds. A bridge from before `/figma-labor-stop` existed can't be stopped that way: kill its `node …/bridge.js` process once.
+
+To run a throwaway bridge next to the live one (the plugin only talks to 3846), set `LABOR_BRIDGE_PORT` for both pi and the bridge, e.g. `LABOR_BRIDGE_PORT=3999 pi`.
+
+To test that the bridge outlives the sessions using it, run `bun test` from the repo root. It runs the real extension and `bridge.js` against a fake pi and a fake plugin on a free port, so the live bridge on 3846 is never touched.

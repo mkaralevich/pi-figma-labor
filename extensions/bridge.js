@@ -3653,7 +3653,7 @@ var import_websocket_server = __toESM(require_websocket_server(), 1);
 
 // src/server.ts
 var import_node_crypto = require("node:crypto");
-var PORT = 3846;
+var PORT = Number(process.env.LABOR_BRIDGE_PORT ?? 3846);
 var COMMAND_TIMEOUT_MS = 3e4;
 var IDENTIFY_TIMEOUT_MS = 1e4;
 var IDENTIFY_SCRIPT = "globalThis.__laborInstanceId ??= Math.random().toString(36).slice(2); return { file: figma.root.name, instance: globalThis.__laborInstanceId };";
@@ -3816,6 +3816,11 @@ var httpServer = import_node_http.default.createServer(async (req, res) => {
       files: open.map(describe),
       pending: pending.size
     });
+    return;
+  }
+  if (req.method === "POST" && req.url === "/shutdown") {
+    sendJson(res, 200, { ok: true });
+    res.on("finish", shutdown);
     return;
   }
   if (req.method === "POST" && (req.url === "/command" || req.url === "/undo")) {

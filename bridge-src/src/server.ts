@@ -9,6 +9,7 @@
  *   POST /command    — send a command, waits for plugin response (sync)
  *   POST /undo       — send an undo command to the plugin
  *   GET  /status     — bridge status plus every connected file
+ *   POST /shutdown   — drop every plugin socket and exit (/figma-labor-stop)
  *
  * Targeting (optional `target` in POST bodies):
  *   connection id (e.g. "c3-4f1a") or exact file name. Without a target the
@@ -26,7 +27,9 @@ import http from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
 
-const PORT = 3846;
+// The plugin connects to 3846; LABOR_BRIDGE_PORT is for running a throwaway
+// bridge next to a live one (tests).
+const PORT = Number(process.env.LABOR_BRIDGE_PORT ?? 3846);
 const COMMAND_TIMEOUT_MS = 30_000;
 const IDENTIFY_TIMEOUT_MS = 10_000;
 
@@ -297,6 +300,14 @@ const httpServer = http.createServer(async (req, res) => {
       files: open.map(describe),
       pending: pending.size,
     });
+    return;
+  }
+
+  // The bridge outlives the sessions that start it, so stopping it is an
+  // explicit request. Reply first: shutdown() drops open connections.
+  if (req.method === "POST" && req.url === "/shutdown") {
+    sendJson(res, 200, { ok: true });
+    res.on("finish", shutdown);
     return;
   }
 

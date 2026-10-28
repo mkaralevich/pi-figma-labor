@@ -5,7 +5,7 @@
  * which relays commands to the Figma plugin via WebSocket → Plugin API.
  *
  * Requires:
- *   1. Bridge server running at http://127.0.0.1:3846  (start with /figma-labor-start)
+ *   1. Bridge server running at http://127.0.0.1:3846  (starts with pi; /figma-labor-start)
  *   2. figma-labor plugin open inside Figma desktop app
  *
  * Tools registered:
@@ -40,7 +40,7 @@
 import { StringEnum } from "@mariozechner/pi-ai";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type, type TSchema } from "@sinclair/typebox";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -55,7 +55,9 @@ const DISCONNECTED_PROMPT = `## Figma labor
 - If the task involves Figma, call \`labor_list_files\` to recheck the connection before asking the user for screenshots or exports.
 - Once connected, read ${PROMPT_PATH} for Labor rules before the first canvas read or write. It is injected automatically from the next prompt on.`;
 
-const BRIDGE_URL = "http://127.0.0.1:3846";
+// LABOR_BRIDGE_PORT is for tests against a throwaway bridge; the plugin itself
+// connects to 3846.
+const BRIDGE_URL = `http://127.0.0.1:${process.env.LABOR_BRIDGE_PORT ?? "3846"}`;
 const BRIDGE_BIN = join(__dirname, "bridge.js");
 const MCP_URL = `http://127.0.0.1:${process.env.FIGMA_MCP_PORT ?? "3845"}/mcp`;
 const MAX_OUTPUT_BYTES = 50 * 1024;
@@ -97,8 +99,6 @@ interface BridgeStatus {
   files?: BridgeFile[];
 }
 
-let bridgeProc: ChildProcess | null = null;
-let bridgeStartedByUs = false;
 let cachedStatus: BridgeStatus | null = null;
 
 function footerSymbols(fileCount: number, mcpReady: boolean): string {
@@ -120,19 +120,22 @@ function isStaleSessionContextError(error: unknown): boolean {
   );
 }
 
-function updateFooterStatus(ctx: {
-  ui: {
-    setStatus: (key: string, value: string | undefined) => void;
-  };
-}): boolean {
+function updateFooterStatus(
+  ctx: {
+    ui: {
+      setStatus: (key: string, value: string | undefined) => void;
+    };
+  },
+  status: BridgeStatus | null = cachedStatus,
+): boolean {
   try {
-    if (cachedStatus?.bridge !== "running") {
+    if (status?.bridge !== "running") {
       ctx.ui.setStatus("labor", undefined);
       return true;
     }
     ctx.ui.setStatus(
       "labor",
-      `labor ${footerSymbols(connectedFileCount(cachedStatus), mcpConnected)}`,
+      `labor ${footerSymbols(connectedFileCount(status), mcpConnected)}`,
     );
     return true;
   } catch (error) {
@@ -221,49 +224,58 @@ async function bridgeUndo(target: string | null): Promise<void> {
   if (json.error) throw new Error(json.error);
 }
 
-// Start the bridge server
+// Start the bridge server. It runs detached and outlives this session:
+// sessions come and go (subagents, /reload, closed windows) while the Figma
+// plugin stays connected to the one bridge. The port is the lock: if two
+// sessions race to start one, the loser fails to bind and exits.
 async function startBridge(signal?: AbortSignal): Promise<boolean> {
   // Already running?
   const status = await bridgeStatus();
   if (status) return true;
   if (signal?.aborted) return false;
 
-  bridgeProc = spawn("node", [BRIDGE_BIN], {
-    detached: false,
-    stdio: ["ignore", "pipe", "pipe"],
+  const proc = spawn("node", [BRIDGE_BIN], {
+    detached: true,
+    stdio: "ignore",
   });
 
   let spawnFailed = false;
-  bridgeProc.on("error", (err) => {
+  proc.on("error", (err) => {
     console.error("[figma-labor] Bridge process error:", err.message);
     spawnFailed = true;
   });
+  proc.unref();
 
-  // Wait up to 3s for it to start to avoid blocking the main thread
+  // Wait up to 3s for it to start to avoid blocking the main thread. An
+  // aborted wait leaves the bridge running; another session may be using it.
   for (let i = 0; i < 15; i++) {
-    if (signal?.aborted) {
-      stopBridge();
-      return false;
-    }
+    if (signal?.aborted) return false;
     if (spawnFailed) return false;
-    await new Promise((r) => setTimeout(r, 200));
+    await delay(200);
     const s = await bridgeStatus(300);
-    if (s) {
-      bridgeStartedByUs = true;
-      return true;
-    }
+    if (s) return true;
   }
 
   return false;
 }
 
-// Stop the bridge server
-function stopBridge() {
-  if (bridgeProc) {
-    bridgeProc.kill("SIGTERM");
-    bridgeProc = null;
+// Ask the running bridge to exit (/figma-labor-stop). False when it did not
+// stop, e.g. a bridge older than the /shutdown endpoint.
+async function stopBridge(): Promise<boolean> {
+  try {
+    const res = await fetch(`${BRIDGE_URL}/shutdown`, {
+      method: "POST",
+      signal: AbortSignal.timeout(2000),
+    });
+    if (!res.ok) return false;
+  } catch {
+    return false;
   }
-  bridgeStartedByUs = false;
+  for (let i = 0; i < 10; i++) {
+    if (!(await bridgeStatus(300))) return true;
+    await delay(200);
+  }
+  return false;
 }
 
 // Plugins reconnect to a restarted bridge within a few seconds.
@@ -296,6 +308,19 @@ async function waitForPlugin(
   return status;
 }
 
+// The bridge outlives sessions, but it can still be gone (stopped with
+// /figma-labor-stop, killed, or never started). Every tool restarts it and
+// gives the plugins time to reconnect, so no session is left without one.
+async function ensureBridge(
+  target: string | null,
+  signal?: AbortSignal,
+): Promise<BridgeStatus | null> {
+  const status = await bridgeStatus();
+  if (status) return status;
+  if (!(await startBridge(signal))) return null;
+  return waitForPlugin(target, signal);
+}
+
 // ## TOOL HELPERS
 
 function formatToolOutput(output: unknown): string {
@@ -317,13 +342,7 @@ async function runBridgeTool(
   params: Record<string, unknown>,
   opts?: BridgeToolOptions,
 ) {
-  let status = await bridgeStatus();
-
-  // The bridge exits with the session that started it. Restart it so other
-  // sessions keep working, and give the plugins time to reconnect to it.
-  if (!status && (await startBridge(opts?.signal))) {
-    status = await waitForPlugin(opts?.target ?? null, opts?.signal);
-  }
+  const status = await ensureBridge(opts?.target ?? null, opts?.signal);
 
   // Handle connection errors
   if (!status) {
@@ -824,9 +843,7 @@ function registerFigmaMcp(pi: ExtensionAPI) {
       clearTimeout(pollTimer);
       pollTimer = null;
     }
-    mcpConnected = false;
-    mcpSessionId = undefined;
-    updateFooterStatus(ctx);
+    updateFooterStatus(ctx, null);
   });
 
   pi.registerCommand("figma-mcp", {
@@ -943,9 +960,9 @@ export default function (pi: ExtensionAPI) {
     bridgeStartupAbort = null;
     bridgeSessionRun++;
     stopPolling();
-    stopBridge();
-    cachedStatus = null;
-    updateFooterStatus(ctx);
+    // Leave the bridge and shared state alone: other sessions in this process
+    // (subagents) and other pi windows use the same bridge and plugin.
+    updateFooterStatus(ctx, null);
   });
 
   // System prompt injection. The full Labor guide is ~10 KB; inject it only
@@ -1027,10 +1044,23 @@ export default function (pi: ExtensionAPI) {
     description: "Stop the figma-labor bridge server",
     handler: async (_args, ctx) => {
       stopPolling();
-      stopBridge();
+      if (!(await bridgeStatus())) {
+        ctx.ui.notify("figma-labor bridge is not running.", "info");
+        return;
+      }
+      if (!(await stopBridge())) {
+        ctx.ui.notify(
+          "Could not stop the figma-labor bridge. It may predate /figma-labor-stop; kill its `node …/bridge.js` process once.",
+          "error",
+        );
+        return;
+      }
       cachedStatus = null;
       updateFooterStatus(ctx);
-      ctx.ui.notify("figma-labor bridge stopped.", "info");
+      ctx.ui.notify(
+        "figma-labor bridge stopped. Any Labor tool call (or /figma-labor-start) starts it again.",
+        "info",
+      );
     },
   });
 
@@ -1075,12 +1105,15 @@ export default function (pi: ExtensionAPI) {
     description:
       "List the Figma files that have the Labor plugin open, and which one this agent's Labor tools target.",
     parameters: Type.Object({}),
-    async execute() {
-      const status = await bridgeStatus();
+    async execute(_id, _params, signal) {
+      const status = await ensureBridge(targetFile, signal);
       if (!status) {
         return {
           content: [
-            { type: "text" as const, text: "figma-labor bridge is not running." },
+            {
+              type: "text" as const,
+              text: "figma-labor bridge is not running and could not be started. Run /figma-labor-start.",
+            },
           ],
           isError: true,
         };
@@ -1121,8 +1154,8 @@ export default function (pi: ExtensionAPI) {
         description: "Exact file name, or connection id from labor_list_files",
       }),
     }),
-    async execute(_id, params) {
-      const files = (await bridgeStatus())?.files ?? [];
+    async execute(_id, params, signal) {
+      const files = (await ensureBridge(null, signal))?.files ?? [];
       const sameName = files.filter((file) => file.file === params.file);
       const match =
         files.find((file) => file.id === params.file) ??
